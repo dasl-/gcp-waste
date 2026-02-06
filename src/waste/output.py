@@ -265,13 +265,15 @@ def output_csv(
 
     for resource in sort_resources(result.idle_resources, sort):
         created = resource.creation_time.isoformat() if resource.creation_time else ""
+        url = _console_url(resource)
+        name = f'=HYPERLINK("{url}","{resource.name}")' if url else resource.name
         writer.writerow([
             resource.resource_type.value,
-            resource.name,
+            name,
             _get_detail(resource),
             resource.project,
             resource.location,
-            _console_url(resource),
+            url,
             created,
             "; ".join(resource.idle_criterion_names),
             f"{resource.estimated_yearly_cost:.2f}" if resource.estimated_yearly_cost else "",
