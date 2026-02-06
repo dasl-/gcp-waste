@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gcp-waste"
+version = "0.1.0"
+description = "GCP Idle Resource Finder - identify underutilized Google Cloud resources"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "google-cloud-compute>=1.14.0",
+    "google-cloud-bigtable>=2.21.0",
+    "google-cloud-storage>=2.10.0",
+    "google-cloud-monitoring>=2.16.0",
+    "google-cloud-billing>=1.11.0",
+    "google-cloud-resource-manager>=1.10.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+gcp-waste = "waste.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

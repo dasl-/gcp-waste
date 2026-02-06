@@ -1,0 +1,1 @@
+"""GCP Idle Resource Finder."""

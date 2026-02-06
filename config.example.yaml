@@ -1,0 +1,120 @@
+# gcp-waste - GCP Idle Resource Finder configuration
+# Copy to config.yaml and customize as needed.
+
+thresholds:
+  compute:
+    # criteria_mode controls how criteria are combined to determine idleness.
+    #
+    # Simple modes (apply to all criteria):
+    #   "all" - resource must meet ALL criteria to be considered idle (AND logic)
+    #   "any" - resource is idle if ANY single criterion matches (OR logic)
+    #
+    # Selective modes (only listed criteria determine the idle decision;
+    # unlisted criteria are still evaluated and shown in output, but are
+    # informational only):
+    #   "all(low_cpu, low_network)" - listed criteria must ALL match (AND)
+    #   "any(low_cpu, low_network)" - ANY of the listed criteria can match (OR)
+    #
+    # For example, with three criteria defined (low_cpu, low_network, low_memory)
+    # and criteria_mode: "all(low_cpu, low_network)", a VM is considered idle
+    # only if both CPU and network are below threshold. Memory is still checked
+    # and reported, but doesn't affect the idle/not-idle decision.
+    #
+    # For compute, "all" is recommended: a VM with high CPU but zero network
+    # is probably doing real work, so we want all signals to agree.
+    criteria_mode: "all"
+
+    # min_age_days: skip resources created fewer than N days ago.
+    # This avoids flagging newly provisioned resources that haven't ramped up yet.
+    # Also used as the default lookback window (--idle-days) for metric queries.
+    min_age_days: 7
+
+    criteria:
+      # low_cpu: flags VMs whose CPU utilization is below the threshold.
+      #   Metric: compute.googleapis.com/instance/cpu/utilization
+      #     "The fraction of the allocated CPU that is currently in use."
+      #   How measured: ALIGN_MEAN over the lookback window (default 7 days).
+      #     This is the average CPU utilization across the entire period, not a
+      #     peak or instantaneous value. A VM that spikes to 100% once a day but
+      #     idles the rest of the time will still show a low mean.
+      #   Units: percent (0-100). The raw metric is 0.0-1.0, converted to percent.
+      - type: low_cpu
+        threshold_percent: 5.0
+
+      # low_network: flags VMs with low network throughput.
+      #   Metrics:
+      #     compute.googleapis.com/instance/network/sent_bytes_count
+      #       "Count of bytes sent over the network by the VM."
+      #     compute.googleapis.com/instance/network/received_bytes_count
+      #       "Count of bytes received over the network by the VM."
+      #   How measured: ALIGN_SUM of sent + received bytes over the lookback
+      #     window, divided by the number of seconds in that window. This gives
+      #     the average bytes/second across the entire period.
+      #   Units: bytes per second.
+      - type: low_network
+        threshold_bytes_per_second: 1000
+
+      # low_memory: flags VMs with low memory usage.
+      #   Metric: agent.googleapis.com/memory/percent_used
+      #     "Percentage of system memory currently in use."
+      #   How measured: ALIGN_MEAN over the lookback window.
+      #   Requires the Ops Agent to be installed on the VM. If the agent is not
+      #   installed, this metric will have no data and the criterion will be
+      #   skipped (treated as not idle), so it won't cause false positives.
+      #   Units: percent (0-100).
+      - type: low_memory
+        threshold_percent: 10.0
+
+  bigtable:
+    criteria_mode: "all"
+    min_age_days: 7
+
+    criteria:
+      # low_requests: flags Bigtable clusters with low request rates.
+      #   Metric: bigtable.googleapis.com/server/request_count
+      #     "Number of server requests for a table."
+      #   How measured: ALIGN_RATE over the lookback window, giving the mean
+      #     requests per second across the entire period. A cluster that handles
+      #     a burst of traffic once a day will still average out.
+      #   Units: requests per second.
+      - type: low_requests
+        threshold_per_second: 1.0
+
+  storage:
+    # For storage, "any" makes sense: if a bucket has zero access, it's idle
+    # regardless of other signals.
+    criteria_mode: "any"
+
+    # min_size_gb: skip buckets smaller than this size. Small buckets cost
+    # almost nothing, so flagging them adds noise without meaningful savings.
+    # Set to null or remove to scan all buckets regardless of size.
+    min_size_gb: 1.0
+
+    criteria:
+      # no_recent_access: flags buckets with zero API requests over N days.
+      #   Metric: storage.googleapis.com/api/request_count
+      #     "Count of API calls made to Cloud Storage, grouped by method."
+      #   How measured: ALIGN_SUM over the "days" window below (not min_age_days).
+      #     If the total request count is 0, the bucket is considered idle.
+      #   The "days" field here controls the lookback window specifically for
+      #   this criterion, independent of min_age_days.
+      - type: no_recent_access
+        days: 90
+
+# Blocklist: resources to skip during scans, per project and resource type.
+# Supports glob patterns (e.g. "prod-*", "critical-db-?").
+# Use this to exclude known-good resources that appear idle by metrics
+# but serve a purpose (e.g. disaster recovery VMs, archival buckets).
+blocklist:
+  my-project-id:
+    compute:
+      - "prod-web-server-1"     # exact match
+      - "critical-db-*"         # glob: matches critical-db-01, critical-db-replica, etc.
+    bigtable:
+      - "production-instance/*" # glob: matches all clusters in this instance
+    storage:
+      - "backup-*"
+
+  another-project:
+    compute:
+      - "jenkins-*"
