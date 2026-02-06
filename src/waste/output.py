@@ -277,7 +277,7 @@ def output_csv(
             f"{resource.estimated_yearly_cost:.2f}" if resource.estimated_yearly_cost else "",
         ])
 
-    console.print(output.getvalue())
+    console.out(output.getvalue(), highlight=False)
 
 
 FORMATTERS = {
