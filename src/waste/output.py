@@ -154,6 +154,9 @@ def output_table(
         created = _format_created(resource)
         url = _console_url(resource)
         name = f"[link={url}]{resource.name}[/link]" if url else resource.name
+        if resource.resource_type == ResourceType.PERSISTENT_DISK:
+            attached = resource.metadata.get("attached_instances", "")
+            name += f"\n({attached})" if attached else "\n(unattached)"
         row = []
         if multi_project:
             row.append(resource.project)

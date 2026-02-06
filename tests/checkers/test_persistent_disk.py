@@ -35,7 +35,8 @@ class TestPersistentDiskChecker:
             sample_config.thresholds.persistent_disk.criteria,
             mode=sample_config.thresholds.persistent_disk.criteria_mode,
         )
-        with patch("waste.checkers.persistent_disk.compute_v1.DisksClient"):
+        with patch("waste.checkers.persistent_disk.compute_v1.DisksClient"), \
+             patch("waste.checkers.persistent_disk.compute_v1.InstancesClient"):
             return PersistentDiskChecker(
                 project="test-project",
                 config=sample_config,
@@ -51,11 +52,24 @@ class TestPersistentDiskChecker:
         scoped.disks = disks
         checker._disks_client.aggregated_list.return_value = [(zone, scoped)]
 
+    def _set_instances(self, checker, instances=None):
+        """Set up mock instances for the instance status map."""
+        if instances is None:
+            # No instances by default
+            scoped = MagicMock()
+            scoped.instances = []
+            checker._instances_client.aggregated_list.return_value = [("zones/us-central1-a", scoped)]
+        else:
+            scoped = MagicMock()
+            scoped.instances = instances
+            checker._instances_client.aggregated_list.return_value = [("zones/us-central1-a", scoped)]
+
     def test_list_resources_filters_ready(self, checker):
         ready = _make_disk("ready-disk", status="READY",
                            disk_type="zones/us-central1-a/diskTypes/pd-ssd")
         creating = _make_disk("creating-disk", status="CREATING")
 
+        self._set_instances(checker)
         self._set_disks(checker, [ready, creating])
 
         resources = checker.list_resources()
@@ -67,6 +81,7 @@ class TestPersistentDiskChecker:
     def test_check_idle_disk_no_reads(self, checker, mock_monitoring_client):
         """Disk with no read data should be idle."""
         disk = _make_disk("idle-disk")
+        self._set_instances(checker)
         self._set_disks(checker, [disk])
 
         # No data returned → idle
@@ -81,6 +96,7 @@ class TestPersistentDiskChecker:
     def test_check_idle_disk_low_reads(self, checker, mock_monitoring_client):
         """Disk with low read throughput should be idle."""
         disk = _make_disk("low-read-disk")
+        self._set_instances(checker)
         self._set_disks(checker, [disk])
 
         # Return low bytes (100 bytes over 7 days = ~0.00017 B/s)
@@ -93,6 +109,7 @@ class TestPersistentDiskChecker:
     def test_check_active_disk_not_idle(self, checker, mock_monitoring_client):
         """Disk with high read throughput should not be idle."""
         disk = _make_disk("active-disk")
+        self._set_instances(checker)
         self._set_disks(checker, [disk])
 
         # Return high bytes (10GB over 7 days = ~16.5 KB/s)
@@ -109,7 +126,8 @@ class TestPersistentDiskChecker:
             config.thresholds.persistent_disk.criteria,
             mode=config.thresholds.persistent_disk.criteria_mode,
         )
-        with patch("waste.checkers.persistent_disk.compute_v1.DisksClient"):
+        with patch("waste.checkers.persistent_disk.compute_v1.DisksClient"), \
+             patch("waste.checkers.persistent_disk.compute_v1.InstancesClient"):
             checker = PersistentDiskChecker(
                 project="test-project",
                 config=config,
@@ -120,6 +138,7 @@ class TestPersistentDiskChecker:
             )
 
         disk = _make_disk("skip-me-123")
+        self._set_instances(checker)
         self._set_disks(checker, [disk])
 
         mock_monitoring_client.query_sum.return_value = None
@@ -129,11 +148,16 @@ class TestPersistentDiskChecker:
 
     def test_metadata_includes_disk_info(self, checker, mock_monitoring_client):
         """Metadata should include disk type, size, users, and provisioned resources."""
+        vm = MagicMock()
+        vm.name = "vm-1"
+        vm.status = "TERMINATED"
+        self._set_instances(checker, [vm])
+
         disk = _make_disk(
             "info-disk",
             disk_type="pd-extreme",
             size_gb=500,
-            users=["projects/p/zones/z/instances/vm-1"],
+            users=["https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/vm-1"],
             provisioned_iops=15000,
             provisioned_throughput=0,
         )
@@ -145,5 +169,35 @@ class TestPersistentDiskChecker:
         assert idle[0].metadata["disk_type"] == "pd-extreme"
         assert idle[0].metadata["size_gb"] == "500"
         assert idle[0].metadata["users"] == "1"
+        assert idle[0].metadata["attached_instances"] == "vm-1 (TERMINATED)"
         assert idle[0].metadata["provisioned_iops"] == "15000"
         assert idle[0].metadata["provisioned_throughput"] == "0"
+
+    def test_unattached_disk_shows_unattached(self, checker, mock_monitoring_client):
+        """Unattached disk should show 'unattached' in metadata."""
+        self._set_instances(checker)
+        disk = _make_disk("orphan-disk", users=[])
+        self._set_disks(checker, [disk])
+        mock_monitoring_client.query_sum.return_value = None
+
+        idle = checker.check()
+        assert len(idle) == 1
+        assert idle[0].metadata["attached_instances"] == "unattached"
+
+    def test_attached_running_instance(self, checker, mock_monitoring_client):
+        """Disk attached to a running instance should show RUNNING status."""
+        vm = MagicMock()
+        vm.name = "prod-vm"
+        vm.status = "RUNNING"
+        self._set_instances(checker, [vm])
+
+        disk = _make_disk(
+            "attached-disk",
+            users=["projects/test-project/zones/us-central1-a/instances/prod-vm"],
+        )
+        self._set_disks(checker, [disk])
+        mock_monitoring_client.query_sum.return_value = None
+
+        idle = checker.check()
+        assert len(idle) == 1
+        assert idle[0].metadata["attached_instances"] == "prod-vm (RUNNING)"

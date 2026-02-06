@@ -20,9 +20,25 @@ class PersistentDiskChecker(BaseChecker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._disks_client = compute_v1.DisksClient(credentials=self.credentials)
+        self._instances_client = compute_v1.InstancesClient(credentials=self.credentials)
+
+    def _build_instance_status_map(self) -> dict[str, str]:
+        """Build a map of instance resource URL → status (RUNNING, TERMINATED, etc.)."""
+        request = compute_v1.AggregatedListInstancesRequest(project=self.project)
+        status_map: dict[str, str] = {}
+        for zone, scoped_list in self._instances_client.aggregated_list(request=request):
+            if scoped_list.instances:
+                for instance in scoped_list.instances:
+                    zone_name = zone.split("/")[-1] if "/" in zone else zone
+                    if zone_name.startswith("zones/"):
+                        zone_name = zone_name[6:]
+                    key = f"projects/{self.project}/zones/{zone_name}/instances/{instance.name}"
+                    status_map[key] = instance.status
+        return status_map
 
     def list_resources(self) -> list[dict]:
         """List all READY persistent disks in the project."""
+        instance_status_map = self._build_instance_status_map()
         request = compute_v1.AggregatedListDisksRequest(project=self.project)
 
         resources = []
@@ -50,13 +66,27 @@ class PersistentDiskChecker(BaseChecker):
                     if "/" in disk_type:
                         disk_type = disk_type.split("/")[-1]
 
+                    # Resolve attached instance names and statuses
+                    user_urls = list(disk.users) if disk.users else []
+                    attached_instances = []
+                    for url in user_urls:
+                        name = url.split("/")[-1]
+                        # Normalize: disk.users contains full API URLs
+                        # (https://www.googleapis.com/compute/v1/projects/...)
+                        # while our map keys start at "projects/..."
+                        idx = url.find("projects/")
+                        lookup_key = url[idx:] if idx >= 0 else url
+                        status = instance_status_map.get(lookup_key, "UNKNOWN")
+                        attached_instances.append(f"{name} ({status})")
+
                     resources.append({
                         "name": disk.name,
                         "location": zone_name,
                         "creation_time": creation_time,
                         "disk_type": disk_type,
                         "size_gb": disk.size_gb,
-                        "users": list(disk.users) if disk.users else [],
+                        "users": user_urls,
+                        "attached_instances": attached_instances,
                         "provisioned_iops": getattr(disk, "provisioned_iops", 0) or 0,
                         "provisioned_throughput": getattr(disk, "provisioned_throughput", 0) or 0,
                     })
@@ -98,6 +128,7 @@ class PersistentDiskChecker(BaseChecker):
                 "disk_type": resource["disk_type"],
                 "size_gb": str(resource["size_gb"]),
                 "users": str(len(resource["users"])),
+                "attached_instances": ", ".join(resource["attached_instances"]) if resource["attached_instances"] else "unattached",
                 "provisioned_iops": str(resource["provisioned_iops"]),
                 "provisioned_throughput": str(resource["provisioned_throughput"]),
             },
