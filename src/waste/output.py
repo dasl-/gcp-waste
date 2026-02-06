@@ -261,16 +261,32 @@ def output_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["type", "name", "detail", "project", "location", "console_url", "created", "reasons", "est_yearly_cost"])
+    writer.writerow(["type", "name", "detail", "attached_to", "project", "location", "console_url", "created", "reasons", "est_yearly_cost"])
 
     for resource in sort_resources(result.idle_resources, sort):
         created = resource.creation_time.isoformat() if resource.creation_time else ""
         url = _console_url(resource)
         name = f'=HYPERLINK("{url}","{resource.name}")' if url else resource.name
+        attached_to = ""
+        if resource.resource_type == ResourceType.PERSISTENT_DISK:
+            attached = resource.metadata.get("attached_instances", "")
+            if attached and attached != "unattached":
+                p = resource.project
+                zone = resource.location
+                parts = []
+                for entry in attached.split(", "):
+                    instance_name = entry.split(" (")[0]
+                    status = entry.split(" (")[1].rstrip(")")
+                    vm_url = f"https://console.cloud.google.com/compute/instancesDetail/zones/{zone}/instances/{instance_name}?project={p}"
+                    parts.append(f'=HYPERLINK("{vm_url}","{instance_name} ({status})")')
+                attached_to = parts[0] if len(parts) == 1 else "; ".join(parts)
+            else:
+                attached_to = "unattached"
         writer.writerow([
             resource.resource_type.value,
             name,
             _get_detail(resource),
+            attached_to,
             resource.project,
             resource.location,
             url,
