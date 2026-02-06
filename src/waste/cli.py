@@ -26,6 +26,7 @@ app = typer.Typer(
 )
 
 console = Console()
+stderr_console = Console(stderr=True)
 
 
 @app.callback()
@@ -89,18 +90,18 @@ def _resolve_projects(pattern: str) -> list[str]:
     try:
         regex = re.compile(pattern)
     except re.error as e:
-        console.print(f"[red]Invalid regex:[/red] {e}")
+        stderr_console.print(f"[red]Invalid regex:[/red] {e}")
         raise typer.Exit(1)
 
-    console.print(f"Listing accessible projects matching [bold]{pattern}[/bold]...")
+    stderr_console.print(f"Listing accessible projects matching [bold]{pattern}[/bold]...")
     all_projects = _list_accessible_projects()
     matched = [p for p in all_projects if regex.search(p)]
 
     if not matched:
-        console.print(f"[red]No accessible projects match pattern:[/red] {pattern}")
+        stderr_console.print(f"[red]No accessible projects match pattern:[/red] {pattern}")
         raise typer.Exit(1)
 
-    console.print(f"Matched [bold]{len(matched)}[/bold] project(s): {', '.join(matched)}\n")
+    stderr_console.print(f"Matched [bold]{len(matched)}[/bold] project(s): {', '.join(matched)}\n")
     return matched
 
 
@@ -162,8 +163,8 @@ def scan(
     from waste.output import SORT_KEYS
 
     if sort not in SORT_KEYS:
-        console.print(f"[red]Unknown sort key:[/red] {sort}")
-        console.print(f"Valid keys: {', '.join(SORT_KEYS)}")
+        stderr_console.print(f"[red]Unknown sort key:[/red] {sort}")
+        stderr_console.print(f"Valid keys: {', '.join(SORT_KEYS)}")
         raise typer.Exit(1)
 
     credentials = None
@@ -199,7 +200,7 @@ def scan(
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {}
             for proj in projects:
-                console.print(f"Scanning [bold]{proj}[/bold]...")
+                stderr_console.print(f"Scanning [bold]{proj}[/bold]...")
                 future = executor.submit(
                     _scan_project, proj, config, types_to_scan,
                     idle_days, min_age, verbose, concurrency, credentials,
@@ -238,7 +239,7 @@ def _scan_project(
     """Scan a single project for idle resources."""
     logger.info("[%s] Starting scan", project)
     perm_checker = PermissionChecker(project)
-    perm_checker.check_and_warn_all("all", console)
+    perm_checker.check_and_warn_all("all", stderr_console)
 
     monitoring = MonitoringClient(project, credentials=credentials, quota_project=quota_project)
     pricing = PricingClient()
@@ -296,8 +297,8 @@ def _resolve_types(resource_type: str) -> list[str]:
         return ["compute", "bigtable", "storage", "persistent_disk"]
     if resource_type in ("compute", "bigtable", "storage", "persistent_disk"):
         return [resource_type]
-    console.print(f"[red]Unknown resource type:[/red] {resource_type}")
-    console.print("Valid types: all, compute, bigtable, storage, persistent_disk")
+    stderr_console.print(f"[red]Unknown resource type:[/red] {resource_type}")
+    stderr_console.print("Valid types: all, compute, bigtable, storage, persistent_disk")
     raise typer.Exit(1)
 
 
