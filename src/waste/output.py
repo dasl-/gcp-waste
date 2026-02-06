@@ -156,7 +156,18 @@ def output_table(
         name = f"[link={url}]{resource.name}[/link]" if url else resource.name
         if resource.resource_type == ResourceType.PERSISTENT_DISK:
             attached = resource.metadata.get("attached_instances", "")
-            name += f"\n({attached})" if attached else "\n(unattached)"
+            if attached and attached != "unattached":
+                p = resource.project
+                zone = resource.location
+                parts = []
+                for entry in attached.split(", "):
+                    instance_name = entry.split(" (")[0]
+                    status = entry.split(" (")[1].rstrip(")")
+                    vm_url = f"https://console.cloud.google.com/compute/instancesDetail/zones/{zone}/instances/{instance_name}?project={p}"
+                    parts.append(f"[link={vm_url}]{instance_name}[/link] ({status})")
+                name += "\n(" + ", ".join(parts) + ")"
+            else:
+                name += "\n(unattached)"
         row = []
         if multi_project:
             row.append(resource.project)
