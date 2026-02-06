@@ -7,6 +7,8 @@ Scans Compute Engine VMs, Bigtable clusters, and Cloud Storage buckets, querying
 ## Installation
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
@@ -116,13 +118,25 @@ blocklist:
 
 See `config.example.yaml` for full documentation of all options.
 
-## Rate Limits
+## Scaling to Many Projects
+
+### Rate Limits
 
 The Cloud Monitoring API has a default quota of 180 requests/min/user when using Application Default Credentials. When scanning many projects concurrently, use `--quota-project` to route API quota through your own project (which typically has a much higher limit):
 
 ```bash
 gcp-waste scan -p ".*" -j 16 --quota-project my-project
 ```
+
+### File Descriptor Limits
+
+High concurrency across many projects opens many gRPC connections simultaneously. On macOS the default file descriptor limit (256) may be too low, causing `Too many open files` errors. Raise it before running:
+
+```bash
+ulimit -n 2048 && gcp-waste scan -p ".*" -j 16 --quota-project my-project
+```
+
+To make this permanent, add `ulimit -n 2048` to your `~/.zshrc` or `~/.bashrc`.
 
 ## Development
 
