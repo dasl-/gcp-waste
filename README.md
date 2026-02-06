@@ -2,7 +2,7 @@
 
 GCP Idle Resource Finder — identify underutilized Google Cloud resources to reduce cloud spending.
 
-Scans Compute Engine VMs, Bigtable clusters, and Cloud Storage buckets, querying metrics from Cloud Monitoring to determine idleness based on configurable criteria.
+Scans Compute Engine VMs, Persistent Disks, Bigtable clusters, and Cloud Storage buckets, querying metrics from Cloud Monitoring to determine idleness based on configurable criteria.
 
 ## Installation
 
@@ -29,7 +29,7 @@ gcloud auth application-default login
 ### Required IAM Permissions
 
 - `monitoring.viewer` — metrics access
-- `compute.viewer` — VM listing
+- `compute.viewer` — VM and disk listing
 - `bigtable.viewer` — Bigtable listing
 - `storage.viewer` — bucket listing
 
@@ -60,7 +60,7 @@ gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--project` | `-p` | required | GCP project ID or regex pattern |
-| `--type` | `-t` | `all` | Resource type: `all`, `compute`, `bigtable`, `storage` |
+| `--type` | `-t` | `all` | Resource type: `all`, `compute`, `persistent_disk`, `bigtable`, `storage` |
 | `--config` | `-c` | built-in defaults | Path to config YAML |
 | `--output` | `-o` | `table` | Output format: `table`, `json`, `csv` |
 | `--sort` | `-s` | `cost` | Sort by: `cost`, `name`, `type`, `project`, `location`, `created` |
@@ -86,6 +86,9 @@ Each resource type has configurable criteria that determine whether a resource i
 - `low_cpu` — average CPU utilization below threshold (default: 5%)
 - `low_network` — average network throughput below threshold (default: 1000 bytes/sec)
 - `low_memory` — average memory usage below threshold (default: 10%, requires Ops Agent)
+
+**Persistent Disks:**
+- `low_disk_read` — average read throughput below threshold (default: 1000 bytes/sec). No data (e.g. unattached disks) is treated as idle.
 
 **Bigtable:**
 - `low_requests` — average request rate below threshold (default: 1 req/sec)
@@ -162,11 +165,12 @@ src/waste/
     base.py            # Abstract base checker
     registry.py        # Checker registry
     compute.py         # Compute Engine VMs
+    persistent_disk.py # Persistent Disks
     bigtable.py        # Bigtable clusters
     storage.py         # Cloud Storage buckets
   criteria/            # Composable idleness criteria
     base.py            # Criterion and CriteriaGroup
-    cpu.py, network.py, memory.py, requests.py, access.py
+    cpu.py, network.py, memory.py, disk.py, requests.py, access.py
   utils/
     permissions.py     # Permission checking with remediation hints
 ```

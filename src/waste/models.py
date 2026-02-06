@@ -11,6 +11,7 @@ class ResourceType(str, Enum):
     COMPUTE_VM = "compute_vm"
     BIGTABLE = "bigtable"
     STORAGE = "storage"
+    PERSISTENT_DISK = "persistent_disk"
 
 
 @dataclass

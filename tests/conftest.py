@@ -100,3 +100,31 @@ def storage_criteria_group(sample_config) -> CriteriaGroup:
         sample_config.thresholds.storage.criteria,
         mode=sample_config.thresholds.storage.criteria_mode,
     )
+
+
+@pytest.fixture
+def sample_persistent_disk_resource() -> IdleResource:
+    """Sample idle persistent disk resource."""
+    return IdleResource(
+        resource_type=ResourceType.PERSISTENT_DISK,
+        name="idle-disk-1",
+        project="test-project",
+        location="us-central1-a",
+        creation_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        metadata={
+            "disk_type": "pd-ssd",
+            "size_gb": "200",
+            "users": "0",
+            "provisioned_iops": "0",
+            "provisioned_throughput": "0",
+        },
+    )
+
+
+@pytest.fixture
+def persistent_disk_criteria_group(sample_config) -> CriteriaGroup:
+    """Criteria group for persistent disks."""
+    return build_criteria_group(
+        sample_config.thresholds.persistent_disk.criteria,
+        mode=sample_config.thresholds.persistent_disk.criteria_mode,
+    )

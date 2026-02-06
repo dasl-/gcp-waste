@@ -101,6 +101,22 @@ thresholds:
       - type: no_recent_access
         days: 90
 
+  persistent_disk:
+    criteria_mode: "all"
+    min_age_days: 7
+
+    criteria:
+      # low_disk_read: flags disks with low read throughput.
+      #   Metric: compute.googleapis.com/instance/disk/read_bytes_count
+      #     "Count of bytes read from disk."
+      #   How measured: ALIGN_SUM over the lookback window, divided by the
+      #     number of seconds in that window to get average bytes/second.
+      #   No data means the disk has zero reads (e.g. unattached disks),
+      #     so it is treated as idle.
+      #   Units: bytes per second.
+      - type: low_disk_read
+        threshold_bytes_per_second: 1000
+
 # Blocklist: resources to skip during scans, per project and resource type.
 # Supports glob patterns (e.g. "prod-*", "critical-db-?").
 # Use this to exclude known-good resources that appear idle by metrics

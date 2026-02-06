@@ -5,19 +5,41 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from google.api_core import exceptions as api_exceptions
+from google.api_core import retry as api_retry
+from google.api_core.client_options import ClientOptions
 from google.cloud import monitoring_v3
 from google.protobuf import timestamp_pb2
 
 logger = logging.getLogger(__name__)
 
+# Retry on quota exhaustion (429) with exponential backoff, in addition to
+# the default transient errors (503 Unavailable, 504 Deadline Exceeded).
+_MONITORING_RETRY = api_retry.Retry(
+    predicate=api_retry.if_exception_type(
+        api_exceptions.DeadlineExceeded,
+        api_exceptions.ServiceUnavailable,
+        api_exceptions.ResourceExhausted,
+    ),
+    initial=2.0,
+    maximum=60.0,
+    multiplier=2.0,
+    deadline=300.0,
+)
+
 
 class MonitoringClient:
     """Wrapper around Cloud Monitoring API for querying resource metrics."""
 
-    def __init__(self, project: str, credentials=None):
+    def __init__(self, project: str, credentials=None, quota_project: str | None = None):
         self.project = project
         self.project_name = f"projects/{project}"
-        self._client = monitoring_v3.MetricServiceClient(credentials=credentials)
+        client_options = None
+        if quota_project:
+            client_options = ClientOptions(quota_project_id=quota_project)
+        self._client = monitoring_v3.MetricServiceClient(
+            credentials=credentials, client_options=client_options,
+        )
 
     def query_mean(
         self,
@@ -66,7 +88,8 @@ class MonitoringClient:
                 "interval": interval,
                 "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
                 "aggregation": aggregation,
-            }
+            },
+            retry=_MONITORING_RETRY,
         )
 
         values = []
@@ -127,7 +150,8 @@ class MonitoringClient:
                 "interval": interval,
                 "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
                 "aggregation": aggregation,
-            }
+            },
+            retry=_MONITORING_RETRY,
         )
 
         total = 0.0
@@ -189,7 +213,8 @@ class MonitoringClient:
                 "interval": interval,
                 "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
                 "aggregation": aggregation,
-            }
+            },
+            retry=_MONITORING_RETRY,
         )
 
         values = []

@@ -66,6 +66,32 @@ STORAGE_MONTHLY_PER_GB: dict[str, float] = {
     "REGIONAL": 0.020,
 }
 
+# ---- Persistent Disk pricing ----
+
+# Monthly per-GB storage cost by disk type (us-central1)
+DISK_MONTHLY_PER_GB: dict[str, float] = {
+    "pd-standard": 0.04,
+    "pd-balanced": 0.10,
+    "pd-ssd": 0.17,
+    "pd-extreme": 0.125,
+    "hyperdisk-balanced": 0.10,
+    "hyperdisk-extreme": 0.125,
+    "hyperdisk-throughput": 0.06,
+}
+
+# Monthly per-IOPS cost for disk types that charge for provisioned IOPS
+DISK_IOPS_MONTHLY: dict[str, float] = {
+    "pd-extreme": 0.01,
+    "hyperdisk-extreme": 0.01,
+    "hyperdisk-balanced": 0.006,
+}
+
+# Monthly per-MBps cost for disk types that charge for provisioned throughput
+DISK_THROUGHPUT_MONTHLY: dict[str, float] = {
+    "hyperdisk-balanced": 0.06,
+    "hyperdisk-throughput": 0.048,
+}
+
 
 class PricingClient:
     """Estimate GCP resource costs from pricing lookup tables."""
@@ -101,6 +127,33 @@ class PricingClient:
         """Get monthly cost per GB for a storage class."""
         return STORAGE_MONTHLY_PER_GB.get(storage_class, 0.020)
 
+    def get_disk_monthly_cost(
+        self,
+        disk_type: str,
+        size_gb: float,
+        provisioned_iops: int = 0,
+        provisioned_throughput: int = 0,
+    ) -> float:
+        """Get monthly cost for a persistent disk.
+
+        Args:
+            disk_type: e.g. "pd-standard", "pd-ssd", "hyperdisk-balanced".
+            size_gb: Disk size in GB.
+            provisioned_iops: Provisioned IOPS (for pd-extreme, hyperdisk types).
+            provisioned_throughput: Provisioned throughput in MBps (for hyperdisk types).
+
+        Returns:
+            Estimated monthly cost in USD.
+        """
+        per_gb = DISK_MONTHLY_PER_GB.get(disk_type, 0.04)
+        iops_rate = DISK_IOPS_MONTHLY.get(disk_type, 0.0)
+        throughput_rate = DISK_THROUGHPUT_MONTHLY.get(disk_type, 0.0)
+        return (
+            size_gb * per_gb
+            + provisioned_iops * iops_rate
+            + provisioned_throughput * throughput_rate
+        )
+
     def estimate_yearly_cost(self, resource: IdleResource) -> float:
         """Calculate estimated yearly cost for a resource."""
         if resource.resource_type == ResourceType.COMPUTE_VM:
@@ -121,5 +174,15 @@ class PricingClient:
             region = resource.location
             per_gb = self.get_storage_monthly_cost_per_gb(storage_class, region)
             return storage_gb * per_gb * 12
+
+        elif resource.resource_type == ResourceType.PERSISTENT_DISK:
+            disk_type = resource.metadata.get("disk_type", "pd-standard")
+            size_gb = float(resource.metadata.get("size_gb", "0"))
+            provisioned_iops = int(resource.metadata.get("provisioned_iops", "0"))
+            provisioned_throughput = int(resource.metadata.get("provisioned_throughput", "0"))
+            monthly = self.get_disk_monthly_cost(
+                disk_type, size_gb, provisioned_iops, provisioned_throughput,
+            )
+            return monthly * 12
 
         return 0.0

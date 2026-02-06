@@ -54,6 +54,11 @@ class ThresholdsConfig(BaseModel):
             CriterionConfig(type="no_recent_access", days=90),
         ]
     ))
+    persistent_disk: ResourceTypeConfig = Field(default_factory=lambda: ResourceTypeConfig(
+        criteria=[
+            CriterionConfig(type="low_disk_read", threshold_bytes_per_second=1000),
+        ]
+    ))
 
 
 class WasteConfig(BaseModel):
@@ -87,7 +92,7 @@ def _log_config(config: WasteConfig, source: str) -> None:
     """Log the parsed configuration at INFO level."""
     logger.info("Configuration loaded from %s", source)
 
-    for rtype in ("compute", "bigtable", "storage"):
+    for rtype in ("compute", "bigtable", "storage", "persistent_disk"):
         type_config: ResourceTypeConfig = getattr(config.thresholds, rtype)
         logger.info(
             "  %s: criteria_mode=%s, min_age_days=%d",

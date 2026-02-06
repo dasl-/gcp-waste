@@ -7,6 +7,9 @@ import pytest
 from waste.models import IdleResource, ResourceType
 from waste.pricing import (
     BIGTABLE_NODE_HOURLY,
+    DISK_IOPS_MONTHLY,
+    DISK_MONTHLY_PER_GB,
+    DISK_THROUGHPUT_MONTHLY,
     HOURS_PER_MONTH,
     STORAGE_MONTHLY_PER_GB,
     VM_HOURLY,
@@ -103,6 +106,40 @@ class TestPricingClientStorage:
         assert cost == 0.020
 
 
+class TestPricingClientDisk:
+    @pytest.fixture
+    def client(self):
+        return PricingClient()
+
+    def test_pd_standard(self, client):
+        cost = client.get_disk_monthly_cost("pd-standard", 100)
+        assert cost == pytest.approx(100 * 0.04)
+
+    def test_pd_ssd(self, client):
+        cost = client.get_disk_monthly_cost("pd-ssd", 200)
+        assert cost == pytest.approx(200 * 0.17)
+
+    def test_pd_extreme_with_iops(self, client):
+        cost = client.get_disk_monthly_cost("pd-extreme", 500, provisioned_iops=10000)
+        assert cost == pytest.approx(500 * 0.125 + 10000 * 0.01)
+
+    def test_hyperdisk_balanced_full(self, client):
+        cost = client.get_disk_monthly_cost(
+            "hyperdisk-balanced", 100, provisioned_iops=3000, provisioned_throughput=140,
+        )
+        assert cost == pytest.approx(100 * 0.10 + 3000 * 0.006 + 140 * 0.06)
+
+    def test_hyperdisk_throughput(self, client):
+        cost = client.get_disk_monthly_cost(
+            "hyperdisk-throughput", 2048, provisioned_throughput=250,
+        )
+        assert cost == pytest.approx(2048 * 0.06 + 250 * 0.048)
+
+    def test_unknown_type_defaults(self, client):
+        cost = client.get_disk_monthly_cost("unknown-type", 100)
+        assert cost == pytest.approx(100 * 0.04)
+
+
 class TestEstimateYearlyCost:
     @pytest.fixture
     def client(self):
@@ -140,3 +177,80 @@ class TestEstimateYearlyCost:
         )
         cost = client.estimate_yearly_cost(resource)
         assert cost == pytest.approx(100 * STORAGE_MONTHLY_PER_GB["STANDARD"] * 12)
+
+    def test_persistent_disk_standard(self, client):
+        resource = IdleResource(
+            resource_type=ResourceType.PERSISTENT_DISK,
+            name="disk-1",
+            project="test",
+            location="us-central1-a",
+            metadata={
+                "disk_type": "pd-standard",
+                "size_gb": "500",
+                "provisioned_iops": "0",
+                "provisioned_throughput": "0",
+            },
+        )
+        cost = client.estimate_yearly_cost(resource)
+        assert cost == pytest.approx(500 * DISK_MONTHLY_PER_GB["pd-standard"] * 12)
+
+    def test_persistent_disk_with_iops(self, client):
+        resource = IdleResource(
+            resource_type=ResourceType.PERSISTENT_DISK,
+            name="disk-2",
+            project="test",
+            location="us-central1-a",
+            metadata={
+                "disk_type": "pd-extreme",
+                "size_gb": "1000",
+                "provisioned_iops": "15000",
+                "provisioned_throughput": "0",
+            },
+        )
+        cost = client.estimate_yearly_cost(resource)
+        expected_monthly = (
+            1000 * DISK_MONTHLY_PER_GB["pd-extreme"]
+            + 15000 * DISK_IOPS_MONTHLY["pd-extreme"]
+        )
+        assert cost == pytest.approx(expected_monthly * 12)
+
+    def test_persistent_disk_with_throughput(self, client):
+        resource = IdleResource(
+            resource_type=ResourceType.PERSISTENT_DISK,
+            name="disk-3",
+            project="test",
+            location="us-central1-a",
+            metadata={
+                "disk_type": "hyperdisk-throughput",
+                "size_gb": "2048",
+                "provisioned_iops": "0",
+                "provisioned_throughput": "140",
+            },
+        )
+        cost = client.estimate_yearly_cost(resource)
+        expected_monthly = (
+            2048 * DISK_MONTHLY_PER_GB["hyperdisk-throughput"]
+            + 140 * DISK_THROUGHPUT_MONTHLY["hyperdisk-throughput"]
+        )
+        assert cost == pytest.approx(expected_monthly * 12)
+
+    def test_persistent_disk_with_iops_and_throughput(self, client):
+        resource = IdleResource(
+            resource_type=ResourceType.PERSISTENT_DISK,
+            name="disk-4",
+            project="test",
+            location="us-central1-a",
+            metadata={
+                "disk_type": "hyperdisk-balanced",
+                "size_gb": "100",
+                "provisioned_iops": "3000",
+                "provisioned_throughput": "140",
+            },
+        )
+        cost = client.estimate_yearly_cost(resource)
+        expected_monthly = (
+            100 * DISK_MONTHLY_PER_GB["hyperdisk-balanced"]
+            + 3000 * DISK_IOPS_MONTHLY["hyperdisk-balanced"]
+            + 140 * DISK_THROUGHPUT_MONTHLY["hyperdisk-balanced"]
+        )
+        assert cost == pytest.approx(expected_monthly * 12)

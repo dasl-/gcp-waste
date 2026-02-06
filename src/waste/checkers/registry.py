@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from waste.checkers.bigtable import BigtableChecker
 from waste.checkers.compute import ComputeChecker
+from waste.checkers.persistent_disk import PersistentDiskChecker
 from waste.checkers.storage import StorageChecker
 
 if TYPE_CHECKING:
@@ -15,4 +16,5 @@ CHECKER_REGISTRY: dict[str, type[BaseChecker]] = {
     "compute": ComputeChecker,
     "bigtable": BigtableChecker,
     "storage": StorageChecker,
+    "persistent_disk": PersistentDiskChecker,
 }

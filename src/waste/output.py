@@ -82,6 +82,10 @@ def _console_url(resource) -> str:
         return f"https://console.cloud.google.com/bigtable/instances/{instance_id}/overview?project={p}"
     if resource.resource_type == ResourceType.STORAGE:
         return f"https://console.cloud.google.com/storage/browser/{resource.name}?project={p}"
+    if resource.resource_type == ResourceType.PERSISTENT_DISK:
+        zone = resource.location
+        name = resource.name
+        return f"https://console.cloud.google.com/compute/disksDetail/zones/{zone}/disks/{name}?project={p}"
     return ""
 
 
@@ -98,6 +102,12 @@ def _get_detail(resource) -> str:
         if size_gb:
             return f"{storage_class} ({float(size_gb):.1f} GB)"
         return storage_class
+    if resource.resource_type == ResourceType.PERSISTENT_DISK:
+        disk_type = resource.metadata.get("disk_type", "")
+        size_gb = resource.metadata.get("size_gb", "")
+        if size_gb:
+            return f"{disk_type} ({float(size_gb):.1f} GB)"
+        return disk_type
     return ""
 
 

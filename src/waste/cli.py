@@ -158,7 +158,6 @@ def scan(
         gcp-waste scan -p "^prod-"
     """
     _setup_logging(verbose)
-    _configure_http_pool(concurrency)
 
     from waste.output import SORT_KEYS
 
@@ -177,6 +176,11 @@ def scan(
     logger.info("Loading configuration from %s", config_path or "defaults")
     config = load_config(config_path)
     types_to_scan = _resolve_types(resource_type)
+
+    # Each project spawns a monitoring client + one checker client per resource
+    # type, each with its own gRPC channel and OAuth token-refresh session.
+    # The pool must be large enough for all of them to refresh concurrently.
+    _configure_http_pool(concurrency * (len(types_to_scan) + 1))
     logger.info("Resource types to scan: %s", ", ".join(types_to_scan))
     projects = _resolve_projects(project)
     logger.info("Projects to scan: %s", ", ".join(projects))
@@ -186,7 +190,7 @@ def scan(
     if len(projects) == 1:
         result = _scan_project(
             projects[0], config, types_to_scan, idle_days, min_age, verbose,
-            concurrency, credentials,
+            concurrency, credentials, quota_project,
         )
         combined.merge(result)
     else:
@@ -199,6 +203,7 @@ def scan(
                 future = executor.submit(
                     _scan_project, proj, config, types_to_scan,
                     idle_days, min_age, verbose, concurrency, credentials,
+                    quota_project,
                 )
                 futures[future] = proj
 
@@ -228,13 +233,14 @@ def _scan_project(
     verbose: bool,
     max_workers: int = 4,
     credentials=None,
+    quota_project: str | None = None,
 ) -> ScanResult:
     """Scan a single project for idle resources."""
     logger.info("[%s] Starting scan", project)
     perm_checker = PermissionChecker(project)
     perm_checker.check_and_warn_all("all", console)
 
-    monitoring = MonitoringClient(project, credentials=credentials)
+    monitoring = MonitoringClient(project, credentials=credentials, quota_project=quota_project)
     pricing = PricingClient()
 
     result = ScanResult(project=project)
@@ -287,11 +293,11 @@ def _scan_project(
 def _resolve_types(resource_type: str) -> list[str]:
     """Resolve the resource type option to a list of checker keys."""
     if resource_type == "all":
-        return ["compute", "bigtable", "storage"]
-    if resource_type in ("compute", "bigtable", "storage"):
+        return ["compute", "bigtable", "storage", "persistent_disk"]
+    if resource_type in ("compute", "bigtable", "storage", "persistent_disk"):
         return [resource_type]
     console.print(f"[red]Unknown resource type:[/red] {resource_type}")
-    console.print("Valid types: all, compute, bigtable, storage")
+    console.print("Valid types: all, compute, bigtable, storage, persistent_disk")
     raise typer.Exit(1)
 
 
