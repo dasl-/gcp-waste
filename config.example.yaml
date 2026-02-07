@@ -70,15 +70,16 @@ thresholds:
     min_age_days: 7
 
     criteria:
-      # low_requests: flags Bigtable clusters with low request rates.
-      #   Metric: bigtable.googleapis.com/server/request_count
-      #     "Number of server requests for a table."
+      # low_read_bytes: flags Bigtable clusters with low read throughput.
+      #   Metric: bigtable.googleapis.com/server/sent_bytes_count
+      #     "Number of bytes sent to clients."
       #   How measured: ALIGN_RATE over the lookback window, giving the mean
-      #     requests per second across the entire period. A cluster that handles
-      #     a burst of traffic once a day will still average out.
-      #   Units: requests per second.
-      - type: low_requests
-        threshold_per_second: 1.0
+      #     bytes per second sent to clients across the entire period. This
+      #     captures actual data consumption — a cluster being written to but
+      #     never read will show zero sent bytes and be flagged as idle.
+      #   Units: bytes per second.
+      - type: low_read_bytes
+        threshold_bytes_per_second: 1000
 
   storage:
     # For storage, "any" makes sense: if a bucket has zero access, it's idle
@@ -116,6 +117,12 @@ thresholds:
       #   Units: bytes per second.
       - type: low_disk_read
         threshold_bytes_per_second: 1000
+
+# min_yearly_cost: hide idle resources with estimated yearly cost below this
+# amount (dollars). Useful for filtering out low-cost noise. Can also be set
+# via --min-cost on the CLI (CLI flag overrides this value).
+# Set to null or remove to show all resources regardless of cost.
+# min_yearly_cost: 100.0
 
 # Blocklist: resources to skip during scans, per project and resource type.
 # Supports glob patterns (e.g. "prod-*", "critical-db-?").

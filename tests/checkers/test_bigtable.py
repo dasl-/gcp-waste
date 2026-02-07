@@ -31,7 +31,7 @@ class TestBigtableChecker:
     def test_list_resources(self, checker):
         cluster = MagicMock()
         cluster.cluster_id = "cluster-0"
-        cluster.location = "projects/test/locations/us-central1-b"
+        cluster.location_id = "us-central1-b"
         cluster.serve_nodes = 3
 
         instance = MagicMock()
@@ -49,7 +49,7 @@ class TestBigtableChecker:
     def test_check_idle_cluster(self, checker, mock_monitoring_client):
         cluster = MagicMock()
         cluster.cluster_id = "cluster-0"
-        cluster.location = "us-central1-b"
+        cluster.location_id = "us-central1-b"
         cluster.serve_nodes = 3
 
         instance = MagicMock()
@@ -58,7 +58,7 @@ class TestBigtableChecker:
 
         checker._bigtable_client.list_instances.return_value = ([instance], [])
 
-        mock_monitoring_client.query_rate.return_value = 0.1  # Very low RPS
+        mock_monitoring_client.query_rate.return_value = 0.1  # Very low read throughput (B/s)
 
         idle = checker.check()
         assert len(idle) == 1
@@ -69,7 +69,7 @@ class TestBigtableChecker:
     def test_check_active_cluster_not_idle(self, checker, mock_monitoring_client):
         cluster = MagicMock()
         cluster.cluster_id = "cluster-0"
-        cluster.location = "us-central1-b"
+        cluster.location_id = "us-central1-b"
         cluster.serve_nodes = 3
 
         instance = MagicMock()
@@ -78,7 +78,7 @@ class TestBigtableChecker:
 
         checker._bigtable_client.list_instances.return_value = ([instance], [])
 
-        mock_monitoring_client.query_rate.return_value = 100.0  # High RPS
+        mock_monitoring_client.query_rate.return_value = 50000.0  # High read throughput (B/s)
 
         idle = checker.check()
         assert len(idle) == 0

@@ -1,4 +1,4 @@
-"""Request rate criterion for Bigtable and similar resources."""
+"""Read bytes throughput criterion for Bigtable and similar resources."""
 
 from __future__ import annotations
 
@@ -11,38 +11,38 @@ if TYPE_CHECKING:
     from waste.config import CriterionConfig
 
 
-class LowRequestsCriterion(Criterion):
-    """Identifies resources with low request rates."""
+class LowReadBytesCriterion(Criterion):
+    """Identifies resources with low read throughput (bytes sent to clients)."""
 
-    name = "low_requests"
-    METRIC_KEY = "requests_per_second"
+    name = "low_read_bytes"
+    METRIC_KEY = "read_bytes_per_second"
 
-    def __init__(self, threshold_per_second: float = 1.0):
-        self.threshold_per_second = threshold_per_second
+    def __init__(self, threshold_bytes_per_second: float = 1000.0):
+        self.threshold_bytes_per_second = threshold_bytes_per_second
 
     def evaluate(self, resource: Any, metrics: dict[str, Any]) -> CriterionResult:
-        rps = metrics.get(self.METRIC_KEY)
+        bps = metrics.get(self.METRIC_KEY)
 
-        if rps is None:
+        if bps is None:
             return CriterionResult(
                 criterion_name=self.name,
-                is_idle=False,
-                reason="Request rate data unavailable",
+                is_idle=True,
+                reason="No read data (zero bytes sent to clients)",
                 metrics={},
             )
 
-        is_idle = rps < self.threshold_per_second
+        is_idle = bps < self.threshold_bytes_per_second
         return CriterionResult(
             criterion_name=self.name,
             is_idle=is_idle,
             reason=(
-                f"Request rate {rps:.2f}/s < {self.threshold_per_second:.1f}/s threshold"
+                f"Read throughput {bps:.0f} B/s < {self.threshold_bytes_per_second:.0f} B/s threshold"
                 if is_idle
-                else f"Request rate {rps:.2f}/s >= {self.threshold_per_second:.1f}/s threshold"
+                else f"Read throughput {bps:.0f} B/s >= {self.threshold_bytes_per_second:.0f} B/s threshold"
             ),
-            metrics={self.METRIC_KEY: rps},
+            metrics={self.METRIC_KEY: bps},
         )
 
     @classmethod
-    def from_config(cls, config: CriterionConfig) -> LowRequestsCriterion:
-        return cls(threshold_per_second=config.threshold_per_second or 1.0)
+    def from_config(cls, config: CriterionConfig) -> LowReadBytesCriterion:
+        return cls(threshold_bytes_per_second=config.threshold_bytes_per_second or 1000.0)

@@ -13,7 +13,10 @@ from waste.pricing import (
     HOURS_PER_MONTH,
     STORAGE_MONTHLY_PER_GB,
     VM_HOURLY,
+    LookupPricingBackend,
+    PricingBackend,
     PricingClient,
+    create_pricing_backend,
 )
 
 
@@ -254,3 +257,67 @@ class TestEstimateYearlyCost:
             + 140 * DISK_THROUGHPUT_MONTHLY["hyperdisk-balanced"]
         )
         assert cost == pytest.approx(expected_monthly * 12)
+
+
+class TestPricingBackend:
+    def test_lookup_is_pricing_backend_subclass(self):
+        assert issubclass(LookupPricingBackend, PricingBackend)
+
+    def test_pricing_client_alias(self):
+        assert PricingClient is LookupPricingBackend
+
+    def test_default_enrich_calls_estimate_per_resource(self):
+        backend = LookupPricingBackend()
+        resources = [
+            IdleResource(
+                resource_type=ResourceType.COMPUTE_VM,
+                name="vm-1",
+                project="test",
+                location="us-central1-a",
+                metadata={"machine_type": "e2-standard-2", "instance_id": "123"},
+            ),
+            IdleResource(
+                resource_type=ResourceType.STORAGE,
+                name="bucket-1",
+                project="test",
+                location="US",
+                metadata={"storage_class": "STANDARD", "size_gb": "100"},
+            ),
+        ]
+        for r in resources:
+            r.estimated_yearly_cost = None
+
+        backend.enrich(resources)
+
+        assert resources[0].estimated_yearly_cost == pytest.approx(
+            0.06701 * HOURS_PER_MONTH * 12
+        )
+        assert resources[1].estimated_yearly_cost == pytest.approx(
+            100 * STORAGE_MONTHLY_PER_GB["STANDARD"] * 12
+        )
+
+
+class TestCreatePricingBackend:
+    def test_lookup(self):
+        backend = create_pricing_backend("lookup")
+        assert isinstance(backend, LookupPricingBackend)
+
+    def test_invalid_name_raises(self):
+        with pytest.raises(ValueError, match="Invalid pricing backend"):
+            create_pricing_backend("nonexistent")
+
+    def test_dotted_path_with_mock_backend(self):
+        backend = create_pricing_backend("waste.pricing.LookupPricingBackend")
+        assert isinstance(backend, LookupPricingBackend)
+
+    def test_dotted_path_missing_module(self):
+        with pytest.raises(ValueError, match="Cannot import module"):
+            create_pricing_backend("nonexistent.module.Backend")
+
+    def test_dotted_path_missing_class(self):
+        with pytest.raises(ValueError, match="has no attribute"):
+            create_pricing_backend("waste.pricing.NoSuchClass")
+
+    def test_dotted_path_not_subclass(self):
+        with pytest.raises(ValueError, match="not a PricingBackend subclass"):
+            create_pricing_backend("waste.pricing.HOURS_PER_MONTH")

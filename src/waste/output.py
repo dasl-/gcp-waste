@@ -34,10 +34,12 @@ def sort_resources(
     return sorted(resources, key=key_func, reverse=reverse)
 
 
-def format_cost(cost: float | None) -> str:
+def format_cost(cost: float | None, is_estimated: bool = False) -> str:
     """Format a cost value for display."""
     if cost is None:
-        return "N/A"
+        return "ERROR"
+    if is_estimated:
+        return f"~${cost:,.2f}/yr"
     return f"${cost:,.2f}/yr"
 
 
@@ -92,7 +94,12 @@ def _console_url(resource) -> str:
 def _get_detail(resource) -> str:
     """Get a detail string for a resource (e.g. machine type for VMs)."""
     if resource.resource_type == ResourceType.COMPUTE_VM:
-        return resource.metadata.get("machine_type", "")
+        detail = resource.metadata.get("machine_type", "")
+        gpu_count = resource.metadata.get("gpu_count")
+        gpu_type = resource.metadata.get("gpu_type", "")
+        if gpu_count:
+            detail += f" + {gpu_count}x {gpu_type}"
+        return detail
     if resource.resource_type == ResourceType.BIGTABLE:
         node_count = resource.metadata.get("node_count", "")
         return f"{node_count} nodes" if node_count else ""
@@ -178,7 +185,7 @@ def output_table(
             resource.location,
             created,
             reasons,
-            format_cost(resource.estimated_yearly_cost),
+            format_cost(resource.estimated_yearly_cost, resource.metadata.get("pricing_source") == "lookup_fallback"),
         ])
         table.add_row(*row)
 
@@ -292,7 +299,7 @@ def output_csv(
             url,
             created,
             "; ".join(resource.idle_criterion_names),
-            f"{resource.estimated_yearly_cost:.2f}" if resource.estimated_yearly_cost else "",
+            (f"~{resource.estimated_yearly_cost:.2f}" if resource.metadata.get("pricing_source") == "lookup_fallback" else f"{resource.estimated_yearly_cost:.2f}") if resource.estimated_yearly_cost is not None else "ERROR",
         ])
 
     console.out(output.getvalue(), highlight=False)

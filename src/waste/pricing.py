@@ -6,7 +6,11 @@ us-central1).  Unknown types fall back to a rough per-vCPU estimate.
 
 from __future__ import annotations
 
+import importlib
 import logging
+import sys
+from abc import ABC, abstractmethod
+from pathlib import Path
 
 from waste.models import IdleResource, ResourceType
 
@@ -93,7 +97,23 @@ DISK_THROUGHPUT_MONTHLY: dict[str, float] = {
 }
 
 
-class PricingClient:
+class PricingBackend(ABC):
+    """Abstract base class for pricing backends."""
+
+    @abstractmethod
+    def estimate_yearly_cost(self, resource: IdleResource) -> float | None: ...
+
+    def enrich(self, resources: list[IdleResource]) -> None:
+        """Batch-update estimated_yearly_cost on idle resources.
+
+        Default implementation calls estimate_yearly_cost() per resource.
+        Backends like BigQuery override this to batch-query.
+        """
+        for r in resources:
+            r.estimated_yearly_cost = self.estimate_yearly_cost(r)
+
+
+class LookupPricingBackend(PricingBackend):
     """Estimate GCP resource costs from pricing lookup tables."""
 
     def get_vm_hourly_cost(self, machine_type: str, zone: str) -> float:
@@ -186,3 +206,56 @@ class PricingClient:
             return monthly * 12
 
         return 0.0
+
+
+# Backward-compatible alias
+PricingClient = LookupPricingBackend
+
+
+def create_pricing_backend(backend: str) -> PricingBackend:
+    """Create a pricing backend by name or dotted import path.
+
+    Args:
+        backend: One of "lookup", "bigquery", or a dotted path like
+                 "mypackage.module.ClassName".
+
+    Returns:
+        A PricingBackend instance.
+
+    Raises:
+        ValueError: If the backend string is invalid or the class is not
+                    a PricingBackend subclass.
+    """
+    if backend == "lookup":
+        return LookupPricingBackend()
+
+    if backend == "bigquery":
+        # Add repo root to sys.path so the gitignored costs/ package is importable
+        repo_root = str(Path(__file__).resolve().parents[2])
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from costs.bigquery_pricing import BigQueryPricingBackend
+
+        return BigQueryPricingBackend()
+
+    # Dotted path: "some.module.ClassName"
+    if "." not in backend:
+        raise ValueError(
+            f"Invalid pricing backend: {backend!r}. "
+            f"Use 'lookup', 'bigquery', or a dotted 'module.ClassName' path."
+        )
+
+    module_path, _, class_name = backend.rpartition(".")
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as e:
+        raise ValueError(f"Cannot import module {module_path!r}: {e}") from e
+
+    cls = getattr(module, class_name, None)
+    if cls is None:
+        raise ValueError(f"Module {module_path!r} has no attribute {class_name!r}")
+
+    if not (isinstance(cls, type) and issubclass(cls, PricingBackend)):
+        raise ValueError(f"{backend!r} is not a PricingBackend subclass")
+
+    return cls()

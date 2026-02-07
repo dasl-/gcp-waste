@@ -11,7 +11,7 @@ from waste.config import WasteConfig
 from waste.criteria.base import CriteriaGroup
 from waste.models import IdleResource, ResourceType
 from waste.monitoring import MonitoringClient
-from waste.pricing import PricingClient
+from waste.pricing import PricingBackend
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class BaseChecker(ABC):
         project: str,
         config: WasteConfig,
         monitoring: MonitoringClient,
-        pricing: PricingClient,
+        pricing: PricingBackend,
         criteria_group: CriteriaGroup,
         idle_days: int = 7,
         min_age_days: int | None = None,
@@ -132,10 +132,14 @@ class BaseChecker(ABC):
         if is_idle:
             idle = self.to_idle_resource(resource, results)
             idle.estimated_yearly_cost = self.pricing.estimate_yearly_cost(idle)
-            logger.info(
-                "[%s] %s is IDLE (est. $%.2f/yr)",
-                self.project, name, idle.estimated_yearly_cost,
-            )
+            cost = idle.estimated_yearly_cost
+            if cost is not None:
+                logger.info(
+                    "[%s] %s is IDLE (est. $%.2f/yr)",
+                    self.project, name, cost,
+                )
+            else:
+                logger.info("[%s] %s is IDLE", self.project, name)
             return idle
 
         logger.info("[%s] %s is not idle", self.project, name)

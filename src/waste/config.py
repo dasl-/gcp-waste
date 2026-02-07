@@ -44,7 +44,7 @@ class ThresholdsConfig(BaseModel):
     ))
     bigtable: ResourceTypeConfig = Field(default_factory=lambda: ResourceTypeConfig(
         criteria=[
-            CriterionConfig(type="low_requests", threshold_per_second=1.0),
+            CriterionConfig(type="low_read_bytes", threshold_bytes_per_second=1000),
         ]
     ))
     storage: ResourceTypeConfig = Field(default_factory=lambda: ResourceTypeConfig(
@@ -66,6 +66,7 @@ class WasteConfig(BaseModel):
 
     thresholds: ThresholdsConfig = Field(default_factory=ThresholdsConfig)
     blocklist: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    min_yearly_cost: float | None = None
 
     def is_blocklisted(self, project: str, resource_type: str, resource_name: str) -> bool:
         """Check if a resource matches any blocklist pattern."""
@@ -102,6 +103,9 @@ def _log_config(config: WasteConfig, source: str) -> None:
             logger.info("  %s: min_size_gb=%.1f", rtype, type_config.min_size_gb)
         for criterion in type_config.criteria:
             logger.info("  %s: criterion: %s", rtype, _log_criterion(criterion))
+
+    if config.min_yearly_cost is not None:
+        logger.info("  min_yearly_cost: $%.2f", config.min_yearly_cost)
 
     if config.blocklist:
         for project, types in config.blocklist.items():

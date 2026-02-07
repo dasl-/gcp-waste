@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
+from google.api_core import exceptions as api_exceptions
 from rich.console import Console
 
 from waste.config import WasteConfig, load_config
@@ -14,7 +15,7 @@ from waste.criteria import build_criteria_group
 from waste.models import ScanResult
 from waste.monitoring import MonitoringClient
 from waste.output import output_result
-from waste.pricing import PricingClient
+from waste.pricing import PricingBackend, create_pricing_backend
 from waste.utils.permissions import PermissionChecker
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ def _setup_logging(verbose: bool) -> None:
         # Show our app logs at INFO, keep noisy SDK logs at WARNING
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
         logging.getLogger("waste").setLevel(logging.INFO)
+        logging.getLogger("costs").setLevel(logging.INFO)
     else:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
@@ -147,6 +149,14 @@ def scan(
         Optional[str],
         typer.Option("--quota-project", help="GCP project to use for API quota (avoids default 180 req/min limit)"),
     ] = None,
+    pricing_backend: Annotated[
+        str,
+        typer.Option("--pricing-backend", help="Pricing backend: lookup, bigquery, or dotted.module.ClassName"),
+    ] = "lookup",
+    min_cost: Annotated[
+        Optional[float],
+        typer.Option("--min-cost", help="Hide resources with estimated yearly cost below this amount (dollars)"),
+    ] = None,
 ) -> None:
     """Scan GCP project(s) for idle/underutilized resources.
 
@@ -176,6 +186,7 @@ def scan(
 
     logger.info("Loading configuration from %s", config_path or "defaults")
     config = load_config(config_path)
+    pricing = create_pricing_backend(pricing_backend)
     types_to_scan = _resolve_types(resource_type)
 
     # Each project spawns a monitoring client + one checker client per resource
@@ -191,7 +202,7 @@ def scan(
     if len(projects) == 1:
         result = _scan_project(
             projects[0], config, types_to_scan, idle_days, min_age, verbose,
-            concurrency, credentials, quota_project,
+            concurrency, credentials, quota_project, pricing,
         )
         combined.merge(result)
     else:
@@ -204,7 +215,7 @@ def scan(
                 future = executor.submit(
                     _scan_project, proj, config, types_to_scan,
                     idle_days, min_age, verbose, concurrency, credentials,
-                    quota_project,
+                    quota_project, pricing,
                 )
                 futures[future] = proj
 
@@ -216,6 +227,23 @@ def scan(
                 except Exception as e:
                     combined.errors.append(f"Error scanning project {proj}: {e}")
                     logger.exception("Error scanning project %s", proj)
+
+    pricing.enrich(combined.idle_resources)
+
+    # Filter out low-cost resources (CLI flag overrides config)
+    cost_threshold = min_cost if min_cost is not None else config.min_yearly_cost
+    if cost_threshold is not None:
+        before = len(combined.idle_resources)
+        combined.idle_resources = [
+            r for r in combined.idle_resources
+            if r.estimated_yearly_cost is None or r.estimated_yearly_cost >= cost_threshold
+        ]
+        filtered = before - len(combined.idle_resources)
+        if filtered:
+            logger.info(
+                "Filtered out %d resource(s) with yearly cost below $%.2f",
+                filtered, cost_threshold,
+            )
 
     logger.info(
         "Scan complete: %d idle resource(s) found, estimated yearly savings: $%.2f",
@@ -235,14 +263,16 @@ def _scan_project(
     max_workers: int = 4,
     credentials=None,
     quota_project: str | None = None,
+    pricing: PricingBackend | None = None,
 ) -> ScanResult:
     """Scan a single project for idle resources."""
+    if pricing is None:
+        pricing = create_pricing_backend("lookup")
     logger.info("[%s] Starting scan", project)
     perm_checker = PermissionChecker(project)
     perm_checker.check_and_warn_all("all", stderr_console)
 
     monitoring = MonitoringClient(project, credentials=credentials, quota_project=quota_project)
-    pricing = PricingClient()
 
     result = ScanResult(project=project)
 
@@ -256,9 +286,14 @@ def _scan_project(
             )
             logger.info("[%s] Found %d idle %s resource(s)", project, len(idle), rtype)
             return rtype, idle, None
-        except PermissionError as e:
+        except (PermissionError, api_exceptions.Forbidden) as e:
+            reason = getattr(e, "reason", None)
+            if reason == "SERVICE_DISABLED":
+                msg = getattr(e, "message", "") or str(e)
+                logger.info("[%s] Skipping %s: %s", project, rtype, msg)
+                return rtype, None, f"Skipping {rtype} in {project}: {msg}"
             logger.info("[%s] Skipping %s: permission denied", project, rtype)
-            return rtype, None, str(e)
+            return rtype, None, f"Skipping {rtype} in {project}: permission denied"
         except Exception as e:
             logger.info("[%s] Error scanning %s: %s", project, rtype, e)
             if verbose:
@@ -307,7 +342,7 @@ def _run_checker(
     project: str,
     config: WasteConfig,
     monitoring: MonitoringClient,
-    pricing: PricingClient,
+    pricing: PricingBackend,
     idle_days: Optional[int],
     min_age: Optional[int],
     max_workers: int = 4,

@@ -60,6 +60,16 @@ class ComputeChecker(BaseChecker):
                         if last_start_time.tzinfo is None:
                             last_start_time = last_start_time.replace(tzinfo=timezone.utc)
 
+                    # Extract GPU info from guest accelerators
+                    gpu_count = 0
+                    gpu_type = ""
+                    if instance.guest_accelerators:
+                        acc = instance.guest_accelerators[0]
+                        gpu_count = acc.accelerator_count
+                        gpu_type = acc.accelerator_type
+                        if "/" in gpu_type:
+                            gpu_type = gpu_type.split("/")[-1]
+
                     resources.append({
                         "name": instance.name,
                         "location": zone_name,
@@ -67,6 +77,8 @@ class ComputeChecker(BaseChecker):
                         "machine_type": machine_type,
                         "creation_time": creation_time,
                         "last_start_time": last_start_time,
+                        "gpu_count": gpu_count,
+                        "gpu_type": gpu_type,
                     })
 
         return resources
@@ -132,5 +144,8 @@ class ComputeChecker(BaseChecker):
                 "instance_id": resource["instance_id"],
                 **({"last_start_time": resource["last_start_time"].isoformat()}
                    if resource.get("last_start_time") else {}),
+                **({"gpu_count": str(resource["gpu_count"]),
+                    "gpu_type": resource["gpu_type"]}
+                   if resource.get("gpu_count") else {}),
             },
         )

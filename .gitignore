@@ -32,3 +32,6 @@ Thumbs.db
 
 # Config (may contain project-specific settings)
 config.yaml
+
+# Cost analysis (internal notes)
+costs/

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from google.cloud import bigtable
 
 from waste.checkers.base import BaseChecker
-from waste.criteria.requests import LowRequestsCriterion
+from waste.criteria.requests import LowReadBytesCriterion
 from waste.models import CriterionResult, IdleResource, ResourceType
 
 
@@ -28,10 +28,8 @@ class BigtableChecker(BaseChecker):
         for instance in self._bigtable_client.list_instances()[0]:
             clusters = instance.list_clusters()[0]
             for cluster in clusters:
-                # Extract location from cluster location string
-                location = cluster.location
-                if "/" in location:
-                    location = location.split("/")[-1]
+                # Extract zone from cluster location_id
+                location = cluster.location_id
 
                 resources.append({
                     "name": f"{instance.instance_id}/{cluster.cluster_id}",
@@ -45,7 +43,7 @@ class BigtableChecker(BaseChecker):
         return resources
 
     def get_metrics(self, resource: dict) -> dict:
-        """Fetch request rate metrics for a Bigtable cluster."""
+        """Fetch read throughput metrics for a Bigtable cluster."""
         instance_id = resource["instance_id"]
         cluster_id = resource["cluster_id"]
         resource_filter = (
@@ -55,13 +53,13 @@ class BigtableChecker(BaseChecker):
 
         metrics = {}
 
-        rps = self.monitoring.query_rate(
-            metric_type="bigtable.googleapis.com/server/request_count",
+        read_bps = self.monitoring.query_rate(
+            metric_type="bigtable.googleapis.com/server/sent_bytes_count",
             resource_filter=resource_filter,
             days=self.idle_days,
         )
-        if rps is not None:
-            metrics[LowRequestsCriterion.METRIC_KEY] = rps
+        if read_bps is not None:
+            metrics[LowReadBytesCriterion.METRIC_KEY] = read_bps
 
         return metrics
 
