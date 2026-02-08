@@ -51,7 +51,7 @@ class ThresholdsConfig(BaseModel):
         criteria_mode="any",
         min_size_gb=1.0,
         criteria=[
-            CriterionConfig(type="no_recent_access", days=90),
+            CriterionConfig(type="low_read_bytes", threshold_bytes_per_second=1000),
         ]
     ))
     persistent_disk: ResourceTypeConfig = Field(default_factory=lambda: ResourceTypeConfig(
@@ -67,6 +67,7 @@ class WasteConfig(BaseModel):
     thresholds: ThresholdsConfig = Field(default_factory=ThresholdsConfig)
     blocklist: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     min_yearly_cost: float | None = None
+    exclude_projects: list[str] = Field(default_factory=list)
 
     def is_blocklisted(self, project: str, resource_type: str, resource_name: str) -> bool:
         """Check if a resource matches any blocklist pattern."""
@@ -106,6 +107,9 @@ def _log_config(config: WasteConfig, source: str) -> None:
 
     if config.min_yearly_cost is not None:
         logger.info("  min_yearly_cost: $%.2f", config.min_yearly_cost)
+
+    if config.exclude_projects:
+        logger.info("  exclude_projects: %s", ", ".join(config.exclude_projects))
 
     if config.blocklist:
         for project, types in config.blocklist.items():

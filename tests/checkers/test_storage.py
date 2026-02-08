@@ -54,8 +54,8 @@ class TestStorageChecker:
         bucket = _make_bucket("idle-bucket")
         checker._storage_client.list_buckets.return_value = [bucket]
 
-        # No requests and large bucket
-        mock_monitoring_client.query_sum.return_value = 0.0
+        # Low egress and large bucket
+        mock_monitoring_client.query_rate.return_value = 0.1  # Very low egress (B/s)
         mock_monitoring_client.query_mean.return_value = 10 * 1024**3  # 10 GB
 
         idle = checker.check()
@@ -67,8 +67,8 @@ class TestStorageChecker:
         bucket = _make_bucket("active-bucket")
         checker._storage_client.list_buckets.return_value = [bucket]
 
-        # Has requests
-        mock_monitoring_client.query_sum.return_value = 1000.0
+        # High egress
+        mock_monitoring_client.query_rate.return_value = 50000.0  # High egress (B/s)
         mock_monitoring_client.query_mean.return_value = 10 * 1024**3
 
         idle = checker.check()
@@ -78,8 +78,8 @@ class TestStorageChecker:
         bucket = _make_bucket("tiny-bucket")
         checker._storage_client.list_buckets.return_value = [bucket]
 
-        # No requests but small bucket
-        mock_monitoring_client.query_sum.return_value = 0.0
+        # Low egress but small bucket
+        mock_monitoring_client.query_rate.return_value = 0.0
         mock_monitoring_client.query_mean.return_value = 0.5 * 1024**3  # 0.5 GB < 1.0 threshold
 
         idle = checker.check()

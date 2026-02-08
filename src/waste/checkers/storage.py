@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from google.cloud import storage
 
 from waste.checkers.base import BaseChecker
-from waste.criteria.access import NoRecentAccessCriterion
+from waste.criteria.requests import LowReadBytesCriterion
 from waste.models import CriterionResult, IdleResource, ResourceType
 
 logger = logging.getLogger(__name__)
@@ -44,26 +44,19 @@ class StorageChecker(BaseChecker):
         return resources
 
     def get_metrics(self, resource: dict) -> dict:
-        """Fetch access and size metrics for a bucket."""
+        """Fetch egress and size metrics for a bucket."""
         bucket_name = resource["name"]
         resource_filter = f'resource.labels.bucket_name = "{bucket_name}"'
 
         metrics = {}
 
-        # Access criterion uses configurable days from the criterion itself
-        access_days = self.idle_days
-        for criterion in self.criteria_group.criteria:
-            if isinstance(criterion, NoRecentAccessCriterion):
-                access_days = criterion.days
-                break
-
-        request_count = self.monitoring.query_sum(
-            metric_type="storage.googleapis.com/api/request_count",
+        egress_bps = self.monitoring.query_rate(
+            metric_type="storage.googleapis.com/network/sent_bytes_count",
             resource_filter=resource_filter,
-            days=access_days,
+            days=self.idle_days,
         )
-        if request_count is not None:
-            metrics[NoRecentAccessCriterion.METRIC_KEY] = request_count
+        if egress_bps is not None:
+            metrics[LowReadBytesCriterion.METRIC_KEY] = egress_bps
 
         # Get bucket size
         size_bytes = self.monitoring.query_mean(

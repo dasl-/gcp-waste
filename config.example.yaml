@@ -92,15 +92,15 @@ thresholds:
     min_size_gb: 1.0
 
     criteria:
-      # no_recent_access: flags buckets with zero API requests over N days.
-      #   Metric: storage.googleapis.com/api/request_count
-      #     "Count of API calls made to Cloud Storage, grouped by method."
-      #   How measured: ALIGN_SUM over the "days" window below (not min_age_days).
-      #     If the total request count is 0, the bucket is considered idle.
-      #   The "days" field here controls the lookback window specifically for
-      #   this criterion, independent of min_age_days.
-      - type: no_recent_access
-        days: 90
+      # low_read_bytes: flags buckets with low egress (data sent to clients).
+      #   Metric: storage.googleapis.com/network/sent_bytes_count
+      #     "Count of bytes sent over the network."
+      #   How measured: ALIGN_RATE over the lookback window, giving the mean
+      #     bytes per second sent to clients. A bucket being written to but
+      #     never read will show zero sent bytes and be flagged as idle.
+      #   Units: bytes per second.
+      - type: low_read_bytes
+        threshold_bytes_per_second: 1000
 
   persistent_disk:
     criteria_mode: "all"
@@ -117,6 +117,13 @@ thresholds:
       #   Units: bytes per second.
       - type: low_disk_read
         threshold_bytes_per_second: 1000
+
+# exclude_projects: skip projects whose IDs match any of these regex patterns.
+# Applied after --project matching, so you can use a broad --project regex
+# and exclude noise here. Each entry is a Python regex (not a glob).
+# exclude_projects:
+#   - "^sys-"              # auto-generated Apps Script projects
+#   - "^aef-"              # App Engine Flex shadow projects
 
 # min_yearly_cost: hide idle resources with estimated yearly cost below this
 # amount (dollars). Useful for filtering out low-cost noise. Can also be set

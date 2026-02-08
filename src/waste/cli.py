@@ -195,6 +195,21 @@ def scan(
     _configure_http_pool(concurrency * (len(types_to_scan) + 1))
     logger.info("Resource types to scan: %s", ", ".join(types_to_scan))
     projects = _resolve_projects(project)
+
+    if config.exclude_projects:
+        exclude_patterns = [re.compile(p) for p in config.exclude_projects]
+        before = len(projects)
+        projects = [
+            p for p in projects
+            if not any(pat.search(p) for pat in exclude_patterns)
+        ]
+        excluded = before - len(projects)
+        if excluded:
+            logger.info("Excluded %d project(s) via exclude_projects config", excluded)
+        if not projects:
+            stderr_console.print("[red]All matched projects were excluded by exclude_projects config[/red]")
+            raise typer.Exit(1)
+
     logger.info("Projects to scan: %s", ", ".join(projects))
 
     combined = ScanResult(project=project)
