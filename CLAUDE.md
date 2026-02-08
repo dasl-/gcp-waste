@@ -21,11 +21,14 @@ src/waste/
   config.py       YAML config loading (Pydantic models). Defines defaults.
   models.py       Data models: IdleResource, ScanResult, CriterionResult.
   monitoring.py   Cloud Monitoring API wrapper (query_mean, query_sum, query_rate).
-  output.py       Output formatters (Rich table, JSON, CSV).
+  output.py       Output formatters (Rich table, JSON, CSV, HTML).
+  html_template.py Self-contained HTML output with Tabulator JS (interactive table).
   pricing.py      PricingBackend ABC + LookupPricingBackend (hardcoded rate tables).
+  vendor/         Vendored JS/CSS (Tabulator 6.3.1) for HTML output.
 
   checkers/       One checker per resource type. Each lists resources, fetches
     base.py        metrics, evaluates criteria, and produces IdleResource objects.
+                   BaseChecker.has_criterion() gates metric queries.
     compute.py     Compute Engine VMs
     persistent_disk.py  Persistent Disks
     bigtable.py    Bigtable clusters
@@ -35,7 +38,8 @@ src/waste/
   criteria/       Composable idleness criteria, evaluated by checkers.
     base.py        Criterion ABC and CriteriaGroup (AND/OR composition).
     cpu.py         LowCPUCriterion (threshold_percent)
-    network.py     LowNetworkCriterion (threshold_bytes_per_second)
+    egress.py      LowEgressCriterion (threshold_bytes_per_second, sent only)
+    network.py     LowNetworkCriterion (threshold_bytes_per_second, sent+received)
     memory.py      LowMemoryCriterion (threshold_percent)
     disk.py        LowDiskReadCriterion (threshold_bytes_per_second)
     requests.py    LowReadBytesCriterion (threshold_bytes_per_second)
@@ -57,7 +61,7 @@ Contains the BigQuery pricing backend and its reference docs. This code queries 
 
 1. `src/waste/criteria/<file>.py` — implement the criterion class
 2. `src/waste/criteria/__init__.py` — add to `CRITERION_REGISTRY` and `__all__`
-3. `src/waste/checkers/<checker>.py` — query the metric, feed into criterion's `METRIC_KEY`
+3. `src/waste/checkers/<checker>.py` — query the metric behind `self.has_criterion()` guard, feed into criterion's `METRIC_KEY`
 4. `src/waste/config.py` — update default in `ThresholdsConfig`
 5. `config.example.yaml` — update the example config
 6. `tests/` — add/update criterion tests and checker tests
@@ -70,6 +74,7 @@ Contains the BigQuery pricing backend and its reference docs. This code queries 
 4. `src/waste/criteria/` — add criteria if needed (see checklist above)
 5. `src/waste/config.py` — add `ResourceTypeConfig` in `ThresholdsConfig`
 6. `src/waste/output.py` — add `_get_detail()`, `_console_url()` cases
+6b. `src/waste/html_template.py` — update HTML output if needed
 7. `src/waste/pricing.py` — add pricing logic in `LookupPricingBackend`
 8. `src/waste/cli.py` — add to type filter options if needed
 9. `config.example.yaml` — add default config
@@ -79,7 +84,8 @@ Contains the BigQuery pricing backend and its reference docs. This code queries 
 ### Changing output columns or formatting
 
 1. `src/waste/output.py` — `output_table()` for Rich, `output_csv()` for CSV, `_serialize_result()` for JSON
-2. All three formats should stay in sync for the same data.
+2. `src/waste/html_template.py` — `render_html()` for interactive HTML (Tabulator JS)
+3. All four formats should stay in sync for the same data.
 
 ## Config Files
 

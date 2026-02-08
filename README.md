@@ -51,6 +51,12 @@ gcp-waste scan -p my-project -t compute
 # Custom config, JSON output, sorted by name
 gcp-waste scan -p my-project -c config.yaml -o json -s name
 
+# Interactive HTML report
+gcp-waste scan -p my-project -o html > report.html
+
+# Hide low-cost resources
+gcp-waste scan -p my-project --min-cost 100
+
 # High concurrency with quota project to avoid rate limits
 gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 ```
@@ -62,12 +68,15 @@ gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 | `--project` | `-p` | required | GCP project ID or regex pattern |
 | `--type` | `-t` | `all` | Resource type: `all`, `compute`, `persistent_disk`, `bigtable`, `storage` |
 | `--config` | `-c` | built-in defaults | Path to config YAML |
-| `--output` | `-o` | `table` | Output format: `table`, `json`, `csv` |
+| `--output` | `-o` | `table` | Output format: `table`, `json`, `csv`, `html` |
 | `--sort` | `-s` | `cost` | Sort by: `cost`, `name`, `type`, `project`, `location`, `created` |
 | `--min-age` | | | Only scan resources older than N days |
 | `--idle-days` | | | Require idleness for N consecutive days |
+| `--min-cost` | | | Hide resources with estimated yearly cost below this amount (dollars) |
 | `--concurrency` | `-j` | `4` | Max parallel workers for API calls |
 | `--quota-project` | | | GCP project for API quota (avoids default 180 req/min limit) |
+| `--pricing-backend` | | `lookup` | Pricing backend: `lookup`, `bigquery`, or custom `dotted.module.ClassName` |
+| `--html-readme-uri` | | | URI to link as README in the HTML output title |
 | `--verbose` | `-v` | `false` | Verbose output |
 
 ## Configuration
@@ -84,17 +93,20 @@ Each resource type has configurable criteria that determine whether a resource i
 
 **Compute VMs:**
 - `low_cpu` — average CPU utilization below threshold (default: 5%)
-- `low_network` — average network throughput below threshold (default: 1000 bytes/sec)
+- `low_network` — average network throughput (sent + received) below threshold (default: 1000 bytes/sec)
+- `low_egress` — average egress (sent only) throughput below threshold (default: 1000 bytes/sec)
 - `low_memory` — average memory usage below threshold (default: 10%, requires Ops Agent)
+
+VMs that have been up for less than `min_age_days` are skipped (not enough metric data).
 
 **Persistent Disks:**
 - `low_disk_read` — average read throughput below threshold (default: 1000 bytes/sec). No data (e.g. unattached disks) is treated as idle.
 
 **Bigtable:**
-- `low_requests` — average request rate below threshold (default: 1 req/sec)
+- `low_read_bytes` — average read throughput below threshold (default: 1000 bytes/sec)
 
 **Storage:**
-- `no_recent_access` — zero API requests over N days (default: 90 days)
+- `low_read_bytes` — average egress throughput below threshold (default: 1000 bytes/sec)
 
 ### Criteria Modes
 
@@ -102,8 +114,8 @@ Control how criteria combine to determine idleness:
 
 - `"all"` — all criteria must match (AND)
 - `"any"` — any criterion can match (OR)
-- `"all(low_cpu, low_network)"` — only listed criteria are decisive; others are informational
-- `"any(low_cpu, low_network)"` — any of the listed criteria can match
+- `"all(low_cpu, low_network)"` — only listed criteria are evaluated; unlisted are skipped
+- `"any(low_cpu, low_network)"` — any of the listed criteria can match; unlisted are skipped
 
 ### Blocklist
 
@@ -119,7 +131,34 @@ blocklist:
       - "backup-*"
 ```
 
+### Other Config Options
+
+```yaml
+# Exclude projects matching these regex patterns
+exclude_projects:
+  - ".*-sandbox"
+  - "test-.*"
+
+# Hide resources with estimated yearly cost below this amount
+min_yearly_cost: 50.0
+```
+
 See `config.example.yaml` for full documentation of all options.
+
+## HTML Output
+
+The `-o html` format produces a self-contained HTML file with an interactive table (powered by [Tabulator](https://tabulator.info/)). Features:
+
+- **Sortable columns** — click column headers
+- **Filter bar** — regex filtering on project/name/location/reasons, type dropdown, min cost, date range
+- **Shareable URLs** — filter/sort state encoded in the URL hash fragment
+- **Live cost total** — updates as you filter
+- **Clickable links** — resource names link to GCP Console
+
+```bash
+gcp-waste scan -p "myorg-.*" -o html > report.html
+gcp-waste scan -p my-project -o html --html-readme-uri="https://wiki/runbook" > report.html
+```
 
 ## Scaling to Many Projects
 
@@ -159,6 +198,7 @@ src/waste/
   config.py            # YAML config loading (Pydantic)
   models.py            # IdleResource, ScanResult dataclasses
   output.py            # Table/JSON/CSV formatters (Rich)
+  html_template.py     # Interactive HTML output (Tabulator JS)
   monitoring.py        # Cloud Monitoring API wrapper
   pricing.py           # Cost estimation
   checkers/            # Resource type scanners
@@ -170,7 +210,8 @@ src/waste/
     storage.py         # Cloud Storage buckets
   criteria/            # Composable idleness criteria
     base.py            # Criterion and CriteriaGroup
-    cpu.py, network.py, memory.py, disk.py, requests.py, access.py
+    cpu.py, egress.py, network.py, memory.py, disk.py, requests.py, access.py
+  vendor/              # Vendored JS/CSS for HTML output
   utils/
     permissions.py     # Permission checking with remediation hints
 ```

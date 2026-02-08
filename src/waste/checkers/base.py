@@ -112,7 +112,15 @@ class BaseChecker(ABC):
         creation_time = resource.get("creation_time")
         if self.is_too_young(creation_time):
             logger.info(
-                "[%s] Skipping %s (younger than %d days)",
+                "[%s] Skipping %s (created less than %d days ago)",
+                self.project, name, self.min_age_days,
+            )
+            return None
+
+        last_start_time = resource.get("last_start_time")
+        if self.is_too_young(last_start_time):
+            logger.info(
+                "[%s] Skipping %s (up for less than %d days)",
                 self.project, name, self.min_age_days,
             )
             return None
