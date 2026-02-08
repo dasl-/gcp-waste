@@ -50,16 +50,16 @@ class BigtableChecker(BaseChecker):
             f'resource.labels.instance = "{instance_id}" '
             f'AND resource.labels.cluster = "{cluster_id}"'
         )
-
         metrics = {}
 
-        read_bps = self.monitoring.query_rate(
-            metric_type="bigtable.googleapis.com/server/sent_bytes_count",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        if read_bps is not None:
-            metrics[LowReadBytesCriterion.METRIC_KEY] = read_bps
+        if self.has_criterion("low_read_bytes"):
+            read_bps = self.monitoring.query_rate(
+                metric_type="bigtable.googleapis.com/server/sent_bytes_count",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+            if read_bps is not None:
+                metrics[LowReadBytesCriterion.METRIC_KEY] = read_bps
 
         return metrics
 

@@ -99,18 +99,18 @@ class PersistentDiskChecker(BaseChecker):
         resource_filter = (
             f'metric.labels.device_name = "{disk_name}"'
         )
-
         metrics = {}
 
-        # Disk read bytes: sum over the window, convert to per-second rate
-        read_bytes = self.monitoring.query_sum(
-            metric_type="compute.googleapis.com/instance/disk/read_bytes_count",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        if read_bytes is not None:
-            seconds = self.idle_days * 86400
-            metrics[LowDiskReadCriterion.METRIC_KEY] = read_bytes / seconds
+        if self.has_criterion("low_disk_read"):
+            # Disk read bytes: sum over the window, convert to per-second rate
+            read_bytes = self.monitoring.query_sum(
+                metric_type="compute.googleapis.com/instance/disk/read_bytes_count",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+            if read_bytes is not None:
+                seconds = self.idle_days * 86400
+                metrics[LowDiskReadCriterion.METRIC_KEY] = read_bytes / seconds
 
         return metrics
 

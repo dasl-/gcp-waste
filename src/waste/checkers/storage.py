@@ -47,18 +47,18 @@ class StorageChecker(BaseChecker):
         """Fetch egress and size metrics for a bucket."""
         bucket_name = resource["name"]
         resource_filter = f'resource.labels.bucket_name = "{bucket_name}"'
-
         metrics = {}
 
-        egress_bps = self.monitoring.query_rate(
-            metric_type="storage.googleapis.com/network/sent_bytes_count",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        if egress_bps is not None:
-            metrics[LowReadBytesCriterion.METRIC_KEY] = egress_bps
+        if self.has_criterion("low_read_bytes"):
+            egress_bps = self.monitoring.query_rate(
+                metric_type="storage.googleapis.com/network/sent_bytes_count",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+            if egress_bps is not None:
+                metrics[LowReadBytesCriterion.METRIC_KEY] = egress_bps
 
-        # Get bucket size
+        # Bucket size is always needed for min_size_gb filtering and metadata
         size_bytes = self.monitoring.query_mean(
             metric_type="storage.googleapis.com/storage/total_bytes",
             resource_filter=resource_filter,

@@ -9,16 +9,14 @@ thresholds:
     #   "all" - resource must meet ALL criteria to be considered idle (AND logic)
     #   "any" - resource is idle if ANY single criterion matches (OR logic)
     #
-    # Selective modes (only listed criteria determine the idle decision;
-    # unlisted criteria are still evaluated and shown in output, but are
-    # informational only):
+    # Selective modes (only listed criteria are evaluated; unlisted criteria
+    # are skipped entirely):
     #   "all(low_cpu, low_network)" - listed criteria must ALL match (AND)
     #   "any(low_cpu, low_network)" - ANY of the listed criteria can match (OR)
     #
     # For example, with three criteria defined (low_cpu, low_network, low_memory)
     # and criteria_mode: "all(low_cpu, low_network)", a VM is considered idle
-    # only if both CPU and network are below threshold. Memory is still checked
-    # and reported, but doesn't affect the idle/not-idle decision.
+    # only if both CPU and network are below threshold. Memory is not evaluated.
     #
     # For compute, "all" is recommended: a VM with high CPU but zero network
     # is probably doing real work, so we want all signals to agree.

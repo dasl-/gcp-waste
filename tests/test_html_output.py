@@ -24,7 +24,7 @@ class TestRenderHtml:
         html = render_html(result)
         assert "<!DOCTYPE html>" in html
         assert "<title>" in html
-        assert "GCP Waste" in html
+        assert "Potential GCP Waste" in html
         assert "Tabulator" in html
         assert "dev-server-1" in html
         assert "test-project" in html
@@ -52,7 +52,7 @@ class TestRenderHtml:
         """Title is always 'GCP Waste' regardless of project."""
         result = ScanResult(project="test-project")
         html = render_html(result)
-        assert "GCP Waste" in html
+        assert "Potential GCP Waste" in html
 
     def test_console_urls_present(self, sample_vm_resource):
         """Console URLs are generated for resources."""

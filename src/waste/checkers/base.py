@@ -84,6 +84,10 @@ class BaseChecker(ABC):
         age = datetime.now(timezone.utc) - creation_time
         return age.days < self.min_age_days
 
+    def has_criterion(self, name: str) -> bool:
+        """Check if a criterion is active in this checker's criteria group."""
+        return name in self.criteria_group.criterion_names
+
     def is_blocklisted(self, resource_name: str) -> bool:
         """Check if a resource is in the blocklist."""
         return self.config.is_blocklisted(

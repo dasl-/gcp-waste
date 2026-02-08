@@ -122,6 +122,7 @@ def output_table(
     result: ScanResult,
     console: Console | None = None,
     sort: str = "cost",
+    **kwargs,
 ) -> None:
     """Output scan results as a Rich table."""
     if console is None:
@@ -248,6 +249,7 @@ def output_json(
     result: ScanResult,
     console: Console | None = None,
     sort: str = "cost",
+    **kwargs,
 ) -> None:
     """Output scan results as JSON."""
     if console is None:
@@ -261,6 +263,7 @@ def output_csv(
     result: ScanResult,
     console: Console | None = None,
     sort: str = "cost",
+    **kwargs,
 ) -> None:
     """Output scan results as CSV."""
     if console is None:
@@ -309,13 +312,14 @@ def output_html(
     result: ScanResult,
     console: Console | None = None,
     sort: str = "cost",
+    readme_uri: str | None = None,
 ) -> None:
     """Output scan results as a self-contained HTML file."""
     if console is None:
         console = Console()
     from waste.html_template import render_html
 
-    html = render_html(result, sort=sort)
+    html = render_html(result, sort=sort, readme_uri=readme_uri)
     console.out(html, highlight=False)
 
 
@@ -332,7 +336,8 @@ def output_result(
     format: Literal["table", "json", "csv", "html"] = "table",
     console: Console | None = None,
     sort: str = "cost",
+    **kwargs,
 ) -> None:
     """Output scan results in the specified format."""
     formatter = FORMATTERS[format]
-    formatter(result, console, sort=sort)
+    formatter(result, console, sort=sort, **kwargs)

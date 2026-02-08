@@ -81,88 +81,61 @@ class TestCriteriaGroup:
         assert results == []
 
 
-class TestRequiredCriteria:
-    """Tests for criteria_mode with explicit criterion lists."""
+class TestSelectiveCriteriaMode:
+    """Tests for criteria_mode with explicit criterion lists via build_criteria_group."""
 
     def test_all_with_required_subset(self):
-        """all(low_cpu) — only CPU must be idle, network is informational."""
-        group = CriteriaGroup(
-            criteria=[
-                LowCPUCriterion(threshold_percent=5.0),
-                LowNetworkCriterion(threshold_bytes_per_second=1000.0),
-            ],
-            mode="all",
-            required_criteria={"low_cpu"},
-        )
-        metrics = {
-            "cpu_utilization_percent": 2.0,       # idle
-            "network_bytes_per_second": 5000.0,   # active — but not required
-        }
+        """all(low_cpu) — only CPU criterion is included."""
+        configs = [
+            CriterionConfig(type="low_cpu", threshold_percent=5.0),
+            CriterionConfig(type="low_network", threshold_bytes_per_second=1000.0),
+        ]
+        group = build_criteria_group(configs, mode="all(low_cpu)")
+        assert len(group.criteria) == 1
+        assert group.criteria[0].name == "low_cpu"
+
+        metrics = {"cpu_utilization_percent": 2.0}
         is_idle, results = group.evaluate(None, metrics)
         assert is_idle is True
-        assert len(results) == 2  # both criteria still evaluated
+        assert len(results) == 1
 
     def test_all_with_required_subset_not_idle(self):
         """all(low_cpu) — required criterion is not met."""
-        group = CriteriaGroup(
-            criteria=[
-                LowCPUCriterion(threshold_percent=5.0),
-                LowNetworkCriterion(threshold_bytes_per_second=1000.0),
-            ],
-            mode="all",
-            required_criteria={"low_cpu"},
-        )
-        metrics = {
-            "cpu_utilization_percent": 50.0,      # active — required
-            "network_bytes_per_second": 100.0,    # idle — but not required
-        }
+        configs = [
+            CriterionConfig(type="low_cpu", threshold_percent=5.0),
+            CriterionConfig(type="low_network", threshold_bytes_per_second=1000.0),
+        ]
+        group = build_criteria_group(configs, mode="all(low_cpu)")
+        metrics = {"cpu_utilization_percent": 50.0}
         is_idle, results = group.evaluate(None, metrics)
         assert is_idle is False
 
     def test_any_with_required_subset(self):
-        """any(low_cpu, low_network) — either of the two must match."""
-        group = CriteriaGroup(
-            criteria=[
-                LowCPUCriterion(threshold_percent=5.0),
-                LowNetworkCriterion(threshold_bytes_per_second=1000.0),
-            ],
-            mode="any",
-            required_criteria={"low_cpu", "low_network"},
-        )
+        """any(low_cpu, low_network) — either must match."""
+        configs = [
+            CriterionConfig(type="low_cpu", threshold_percent=5.0),
+            CriterionConfig(type="low_network", threshold_bytes_per_second=1000.0),
+        ]
+        group = build_criteria_group(configs, mode="any(low_cpu, low_network)")
+        assert len(group.criteria) == 2
+
         metrics = {
-            "cpu_utilization_percent": 2.0,       # idle
-            "network_bytes_per_second": 5000.0,   # active
+            "cpu_utilization_percent": 2.0,
+            "network_bytes_per_second": 5000.0,
         }
         is_idle, results = group.evaluate(None, metrics)
         assert is_idle is True
 
-    def test_required_criteria_no_match_returns_not_idle(self):
-        """If no required criteria names match any evaluated criterion, not idle."""
-        group = CriteriaGroup(
-            criteria=[
-                LowCPUCriterion(threshold_percent=5.0),
-            ],
-            mode="all",
-            required_criteria={"nonexistent"},
-        )
-        metrics = {"cpu_utilization_percent": 2.0}
-        is_idle, results = group.evaluate(None, metrics)
-        assert is_idle is False
-        assert len(results) == 1  # CPU still evaluated
-
     def test_all_required_must_all_match(self):
-        """all(low_cpu, low_network) — both required criteria must be idle."""
-        group = CriteriaGroup(
-            criteria=[
-                LowCPUCriterion(threshold_percent=5.0),
-                LowNetworkCriterion(threshold_bytes_per_second=1000.0),
-            ],
-            mode="all",
-            required_criteria={"low_cpu", "low_network"},
-        )
+        """all(low_cpu, low_network) — both must be idle."""
+        configs = [
+            CriterionConfig(type="low_cpu", threshold_percent=5.0),
+            CriterionConfig(type="low_network", threshold_bytes_per_second=1000.0),
+        ]
+        group = build_criteria_group(configs, mode="all(low_cpu, low_network)")
         metrics = {
-            "cpu_utilization_percent": 2.0,       # idle
-            "network_bytes_per_second": 5000.0,   # active
+            "cpu_utilization_percent": 2.0,
+            "network_bytes_per_second": 5000.0,
         }
         is_idle, results = group.evaluate(None, metrics)
         assert is_idle is False
@@ -217,7 +190,6 @@ class TestBuildCriteriaGroup:
         group = build_criteria_group(configs, mode="all")
         assert len(group.criteria) == 2
         assert group.mode == "all"
-        assert group.required_criteria is None
         assert isinstance(group.criteria[0], LowCPUCriterion)
         assert isinstance(group.criteria[1], LowNetworkCriterion)
 
@@ -228,7 +200,8 @@ class TestBuildCriteriaGroup:
         ]
         group = build_criteria_group(configs, mode="all(low_cpu)")
         assert group.mode == "all"
-        assert group.required_criteria == {"low_cpu"}
+        assert len(group.criteria) == 1
+        assert isinstance(group.criteria[0], LowCPUCriterion)
 
     def test_build_unknown_type_raises(self):
         configs = [CriterionConfig(type="nonexistent")]

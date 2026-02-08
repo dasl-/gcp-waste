@@ -41,13 +41,6 @@ def build_criteria_group(
     """
     parsed_mode, required_criteria = parse_criteria_mode(mode)
 
-    criteria = []
-    for config in criteria_configs:
-        cls = CRITERION_REGISTRY.get(config.type)
-        if cls is None:
-            raise ValueError(f"Unknown criterion type: {config.type}")
-        criteria.append(cls.from_config(config))
-
     if required_criteria is not None:
         defined = {config.type for config in criteria_configs}
         unknown = required_criteria - defined
@@ -57,9 +50,16 @@ def build_criteria_group(
                 f"Defined criteria: {', '.join(sorted(defined))}"
             )
 
-    return CriteriaGroup(
-        criteria=criteria, mode=parsed_mode, required_criteria=required_criteria
-    )
+    criteria = []
+    for config in criteria_configs:
+        if required_criteria is not None and config.type not in required_criteria:
+            continue
+        cls = CRITERION_REGISTRY.get(config.type)
+        if cls is None:
+            raise ValueError(f"Unknown criterion type: {config.type}")
+        criteria.append(cls.from_config(config))
+
+    return CriteriaGroup(criteria=criteria, mode=parsed_mode)
 
 
 __all__ = [

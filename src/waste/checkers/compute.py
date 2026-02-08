@@ -85,50 +85,62 @@ class ComputeChecker(BaseChecker):
         return resources
 
     def get_metrics(self, resource: dict) -> dict:
-        """Fetch CPU and network metrics for a VM."""
+        """Fetch metrics for a VM, skipping metrics not needed by active criteria."""
         instance_id = resource["instance_id"]
         resource_filter = (
             f'resource.labels.instance_id = "{instance_id}"'
         )
-
         metrics = {}
 
         # CPU utilization (returns 0-1, convert to percent)
-        cpu = self.monitoring.query_mean(
-            metric_type="compute.googleapis.com/instance/cpu/utilization",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        if cpu is not None:
-            metrics[LowCPUCriterion.METRIC_KEY] = cpu * 100.0
+        if self.has_criterion("low_cpu"):
+            cpu = self.monitoring.query_mean(
+                metric_type="compute.googleapis.com/instance/cpu/utilization",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+            if cpu is not None:
+                metrics[LowCPUCriterion.METRIC_KEY] = cpu * 100.0
 
-        # Network: sum of sent and received bytes, convert to per-second
-        sent = self.monitoring.query_sum(
-            metric_type="compute.googleapis.com/instance/network/sent_bytes_count",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        received = self.monitoring.query_sum(
-            metric_type="compute.googleapis.com/instance/network/received_bytes_count",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
+        # Network: sent bytes needed for both low_egress and low_network
+        need_sent = self.has_criterion("low_egress") or self.has_criterion("low_network")
+        need_received = self.has_criterion("low_network")
+
+        if need_sent:
+            sent = self.monitoring.query_sum(
+                metric_type="compute.googleapis.com/instance/network/sent_bytes_count",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+        else:
+            sent = None
+
+        if need_received:
+            received = self.monitoring.query_sum(
+                metric_type="compute.googleapis.com/instance/network/received_bytes_count",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+        else:
+            received = None
+
         seconds = self.idle_days * 86400
-        if sent is not None:
+        if sent is not None and self.has_criterion("low_egress"):
             metrics[LowEgressCriterion.METRIC_KEY] = sent / seconds
         if sent is not None and received is not None:
             total_bytes = sent + received
             metrics[LowNetworkCriterion.METRIC_KEY] = total_bytes / seconds
 
         # Memory (from ops agent, may not be available)
-        memory = self.monitoring.query_mean(
-            metric_type="agent.googleapis.com/memory/percent_used",
-            resource_filter=resource_filter,
-            days=self.idle_days,
-        )
-        if memory is not None:
-            from waste.criteria.memory import LowMemoryCriterion
-            metrics[LowMemoryCriterion.METRIC_KEY] = memory
+        if self.has_criterion("low_memory"):
+            memory = self.monitoring.query_mean(
+                metric_type="agent.googleapis.com/memory/percent_used",
+                resource_filter=resource_filter,
+                days=self.idle_days,
+            )
+            if memory is not None:
+                from waste.criteria.memory import LowMemoryCriterion
+                metrics[LowMemoryCriterion.METRIC_KEY] = memory
 
         return metrics
 

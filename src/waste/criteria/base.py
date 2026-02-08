@@ -44,9 +44,8 @@ def parse_criteria_mode(mode_str: str) -> tuple[str, set[str] | None]:
       "all(low_cpu, low_network)"  → ("all", {"low_cpu", "low_network"})
       "any(low_cpu, low_network)"  → ("any", {"low_cpu", "low_network"})
 
-    When required_criteria is not None, only those criteria determine the
-    idle/not-idle decision. All criteria are still evaluated and shown in
-    output, but unlisted ones are informational only.
+    When required_criteria is not None, only those criteria are included
+    in the group. Unlisted criteria are not evaluated.
 
     Returns:
         Tuple of (mode, required_criteria). mode is "all" or "any".
@@ -79,19 +78,19 @@ class CriteriaGroup:
         self,
         criteria: list[Criterion],
         mode: Literal["all", "any"] = "all",
-        required_criteria: set[str] | None = None,
     ):
         self.criteria = criteria
         self.mode = mode
-        self.required_criteria = required_criteria
+
+    @property
+    def criterion_names(self) -> set[str]:
+        """Return the set of criterion names in this group."""
+        return {c.name for c in self.criteria}
 
     def evaluate(
         self, resource: Any, metrics: dict[str, Any]
     ) -> tuple[bool, list[CriterionResult]]:
         """Evaluate all criteria and combine results.
-
-        All criteria are always evaluated. If required_criteria is set, only
-        those criteria determine the idle decision; the rest are informational.
 
         Args:
             resource: The resource being evaluated.
@@ -105,17 +104,9 @@ class CriteriaGroup:
         if not results:
             return False, []
 
-        if self.required_criteria is not None:
-            deciding = [r for r in results if r.criterion_name in self.required_criteria]
-        else:
-            deciding = results
-
-        if not deciding:
-            return False, results
-
         if self.mode == "all":
-            is_idle = all(r.is_idle for r in deciding)
+            is_idle = all(r.is_idle for r in results)
         else:
-            is_idle = any(r.is_idle for r in deciding)
+            is_idle = any(r.is_idle for r in results)
 
         return is_idle, results

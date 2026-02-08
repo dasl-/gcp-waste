@@ -157,6 +157,10 @@ def scan(
         Optional[float],
         typer.Option("--min-cost", help="Hide resources with estimated yearly cost below this amount (dollars)"),
     ] = None,
+    html_readme_uri: Annotated[
+        Optional[str],
+        typer.Option("--html-readme-uri", help="URI to link as README in the HTML output title"),
+    ] = None,
 ) -> None:
     """Scan GCP project(s) for idle/underutilized resources.
 
@@ -265,7 +269,7 @@ def scan(
         len(combined.idle_resources),
         combined.total_estimated_savings,
     )
-    output_result(combined, format=output_format, console=console, sort=sort)
+    output_result(combined, format=output_format, console=console, sort=sort, readme_uri=html_readme_uri)
 
 
 def _scan_project(

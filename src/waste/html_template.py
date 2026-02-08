@@ -265,7 +265,7 @@ HTML_TEMPLATE = """\
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>💸 GCP Waste</title>
+<title>💸 Potential GCP Waste</title>
 <style>
 {tabulator_css}
 </style>
@@ -452,7 +452,7 @@ h1 {{
 </style>
 </head>
 <body>
-<h1>💸 GCP Waste</h1>
+<h1>💸 Potential GCP Waste{readme_link}</h1>
 
 <div id="filter-bar">
     <label>Project
@@ -508,7 +508,7 @@ var DATA = {data_json};
 """
 
 
-def render_html(result: ScanResult, sort: str = "cost") -> str:
+def render_html(result: ScanResult, sort: str = "cost", readme_uri: str | None = None) -> str:
     """Render ScanResult as a self-contained HTML string."""
     from waste.output import _console_url, _format_created, _get_detail, sort_resources
 
@@ -602,10 +602,19 @@ def render_html(result: ScanResult, sort: str = "cost") -> str:
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    readme_link = ""
+    if readme_uri:
+        safe_uri = html_mod.escape(readme_uri, quote=True)
+        readme_link = (
+            f' <a href="{safe_uri}" target="_blank" rel="noopener"'
+            f' style="font-size:0.5em;vertical-align:middle;color:#66d9ef">(README)</a>'
+        )
+
     return HTML_TEMPLATE.format(
         tabulator_css=tabulator_css,
         tabulator_js=tabulator_js,
         data_json=json.dumps(data),
         app_js=APP_JS,
         generated_date=f"· Generated {generated}",
+        readme_link=readme_link,
     )
