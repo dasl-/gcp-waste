@@ -123,7 +123,7 @@ def scan(
     ] = None,
     output_format: Annotated[
         str,
-        typer.Option("--output", "-o", help="Output format: table, json, csv"),
+        typer.Option("--output", "-o", help="Output format: table, json, csv, html"),
     ] = "table",
     min_age: Annotated[
         Optional[int],

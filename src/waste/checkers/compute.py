@@ -8,6 +8,7 @@ from google.cloud import compute_v1
 
 from waste.checkers.base import BaseChecker
 from waste.criteria.cpu import LowCPUCriterion
+from waste.criteria.egress import LowEgressCriterion
 from waste.criteria.network import LowNetworkCriterion
 from waste.models import CriterionResult, IdleResource, ResourceType
 
@@ -112,9 +113,11 @@ class ComputeChecker(BaseChecker):
             resource_filter=resource_filter,
             days=self.idle_days,
         )
+        seconds = self.idle_days * 86400
+        if sent is not None:
+            metrics[LowEgressCriterion.METRIC_KEY] = sent / seconds
         if sent is not None and received is not None:
             total_bytes = sent + received
-            seconds = self.idle_days * 86400
             metrics[LowNetworkCriterion.METRIC_KEY] = total_bytes / seconds
 
         # Memory (from ops agent, may not be available)

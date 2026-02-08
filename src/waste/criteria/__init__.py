@@ -8,6 +8,7 @@ from waste.criteria.access import NoRecentAccessCriterion
 from waste.criteria.base import Criterion, CriteriaGroup, parse_criteria_mode
 from waste.criteria.cpu import LowCPUCriterion
 from waste.criteria.disk import LowDiskReadCriterion
+from waste.criteria.egress import LowEgressCriterion
 from waste.criteria.memory import LowMemoryCriterion
 from waste.criteria.network import LowNetworkCriterion
 from waste.criteria.requests import LowReadBytesCriterion
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 CRITERION_REGISTRY: dict[str, type[Criterion]] = {
     "low_cpu": LowCPUCriterion,
+    "low_egress": LowEgressCriterion,
     "low_network": LowNetworkCriterion,
     "low_memory": LowMemoryCriterion,
     "low_read_bytes": LowReadBytesCriterion,
@@ -65,6 +67,7 @@ __all__ = [
     "Criterion",
     "CriteriaGroup",
     "LowCPUCriterion",
+    "LowEgressCriterion",
     "LowNetworkCriterion",
     "LowMemoryCriterion",
     "LowReadBytesCriterion",

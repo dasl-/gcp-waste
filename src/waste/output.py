@@ -305,16 +305,31 @@ def output_csv(
     console.out(output.getvalue(), highlight=False)
 
 
+def output_html(
+    result: ScanResult,
+    console: Console | None = None,
+    sort: str = "cost",
+) -> None:
+    """Output scan results as a self-contained HTML file."""
+    if console is None:
+        console = Console()
+    from waste.html_template import render_html
+
+    html = render_html(result, sort=sort)
+    console.out(html, highlight=False)
+
+
 FORMATTERS = {
     "table": output_table,
     "json": output_json,
     "csv": output_csv,
+    "html": output_html,
 }
 
 
 def output_result(
     result: ScanResult,
-    format: Literal["table", "json", "csv"] = "table",
+    format: Literal["table", "json", "csv", "html"] = "table",
     console: Console | None = None,
     sort: str = "cost",
 ) -> None:

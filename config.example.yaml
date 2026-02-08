@@ -54,6 +54,17 @@ thresholds:
       - type: low_network
         threshold_bytes_per_second: 1000
 
+      # low_egress: flags VMs with low egress (outbound) network throughput.
+      #   Metric: compute.googleapis.com/instance/network/sent_bytes_count
+      #     "Count of bytes sent over the network by the VM."
+      #   How measured: ALIGN_SUM of sent bytes over the lookback window,
+      #     divided by the number of seconds in that window.
+      #   Units: bytes per second.
+      #   Unlike low_network (which sums sent + received), this criterion
+      #   looks only at outbound traffic.
+      # - type: low_egress
+      #   threshold_bytes_per_second: 1000
+
       # low_memory: flags VMs with low memory usage.
       #   Metric: agent.googleapis.com/memory/percent_used
       #     "Percentage of system memory currently in use."
