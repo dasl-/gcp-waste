@@ -92,6 +92,23 @@ var table = new Tabulator("#table", {
     renderVertical: "basic",
 });
 
+table.on("tableBuilt", function() {
+    // Switch to page-level scrolling with sticky header now that
+    // the DOM is fully built.  During construction Tabulator's
+    // default overflow:auto keeps forced layouts contained and cheap.
+    var el = document.querySelector(".tabulator");
+    if (el) el.style.overflow = "visible";
+    var holder = document.querySelector(".tabulator-tableholder");
+    if (holder) holder.style.overflow = "visible";
+    var header = document.querySelector(".tabulator-header");
+    if (header) {
+        header.style.position = "sticky";
+        header.style.top = "0";
+        header.style.zIndex = "10";
+    }
+    document.getElementById("loading").style.display = "none";
+});
+
 // ---- Custom filter logic ----
 function makeFilter(val) {
     if (!val) return null;
@@ -336,7 +353,6 @@ h1 {{
     color: #f8f8f2 !important;
     font-family: inherit !important;
     font-size: 13px !important;
-    overflow: visible !important;
 }}
 .tabulator .tabulator-header {{
     background-color: #3e3d32 !important;
@@ -390,16 +406,8 @@ h1 {{
 .tabulator a:hover {{
     color: #a6e22e;
 }}
-/* Sticky header: remove overflow from tableholder so page scrolls,
-   then sticky positioning on the header works against the viewport. */
-.tabulator .tabulator-tableholder {{
-    overflow: visible !important;
-}}
-.tabulator .tabulator-header {{
-    position: sticky !important;
-    top: 0;
-    z-index: 10;
-}}
+/* Sticky header and overflow:visible are applied via JS after tableBuilt
+   to avoid O(n^2) forced-layout thrashing in Safari during construction. */
 /* Cursor: default on cells, pointer only on links and sortable headers */
 .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell {{
     cursor: default !important;
@@ -433,6 +441,12 @@ h1 {{
     background: #49483e;
     border-color: #a6e22e;
 }}
+#loading {{
+    text-align: center;
+    padding: 40px;
+    font-size: 16px;
+    color: #75715e;
+}}
 /* Muted text in cells */
 .tabulator span[style*="color:#888"] {{
     color: #75715e !important;
@@ -462,10 +476,10 @@ h1 {{
         <input type="text" id="filter-location" placeholder="regex...">
     </label>
     <label>Created After
-        <input type="date" id="filter-created-after">
+        <input type="text" id="filter-created-after" placeholder="yyyy-mm-dd" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'">
     </label>
     <label>Created Before
-        <input type="date" id="filter-created-before">
+        <input type="text" id="filter-created-before" placeholder="yyyy-mm-dd" onfocus="this.type='date'" onblur="if(!this.value)this.type='text'">
     </label>
     <label>Reasons
         <input type="text" id="filter-reason" placeholder="regex...">
@@ -481,6 +495,7 @@ h1 {{
     <span id="total-cost"></span>
 </div>
 
+<div id="loading">Loading table…</div>
 <div id="table"></div>
 
 <script>
