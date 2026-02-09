@@ -35,3 +35,4 @@ config.yaml
 
 # Cost analysis (internal notes)
 costs/
+personal/
