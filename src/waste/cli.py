@@ -269,7 +269,8 @@ def scan(
         len(combined.idle_resources),
         combined.total_estimated_savings,
     )
-    output_result(combined, format=output_format, console=console, sort=sort, readme_uri=html_readme_uri)
+    readme_uri = html_readme_uri if html_readme_uri is not None else config.html_readme_uri
+    output_result(combined, format=output_format, console=console, sort=sort, readme_uri=readme_uri)
 
 
 def _scan_project(

@@ -93,56 +93,35 @@ var table = new Tabulator("#table", {
 });
 
 // ---- Custom filter logic ----
+function makeFilter(val) {
+    if (!val) return null;
+    try { return new RegExp(val, "i"); }
+    catch(e) {
+        var lower = val.toLowerCase();
+        return {test: function(s) { return s.toLowerCase().indexOf(lower) !== -1; }};
+    }
+}
+
 function applyFilters() {
-    var projectVal = document.getElementById("filter-project").value.trim();
-    var nameVal = document.getElementById("filter-name").value.trim();
+    var projectRe = makeFilter(document.getElementById("filter-project").value.trim());
+    var nameRe = makeFilter(document.getElementById("filter-name").value.trim());
     var typeVal = document.getElementById("filter-type").value;
     var minCostVal = document.getElementById("filter-min-cost").value;
+    var minCost = minCostVal ? parseFloat(minCostVal) : NaN;
     var beforeVal = document.getElementById("filter-created-before").value;
     var afterVal = document.getElementById("filter-created-after").value;
-    var locationVal = document.getElementById("filter-location").value.trim();
-    var reasonVal = document.getElementById("filter-reason").value.trim();
+    var locationRe = makeFilter(document.getElementById("filter-location").value.trim());
+    var reasonRe = makeFilter(document.getElementById("filter-reason").value.trim());
 
     table.setFilter(function(data) {
-        if (projectVal) {
-            try {
-                if (!new RegExp(projectVal, "i").test(data.project)) return false;
-            } catch(e) {
-                if (data.project.toLowerCase().indexOf(projectVal.toLowerCase()) === -1) return false;
-            }
-        }
-        if (nameVal) {
-            try {
-                if (!new RegExp(nameVal, "i").test(data.name)) return false;
-            } catch(e) {
-                if (data.name.toLowerCase().indexOf(nameVal.toLowerCase()) === -1) return false;
-            }
-        }
+        if (projectRe && !projectRe.test(data.project)) return false;
+        if (nameRe && !nameRe.test(data.name)) return false;
         if (typeVal && data.resource_type !== typeVal) return false;
-        if (minCostVal) {
-            var minCost = parseFloat(minCostVal);
-            if (!isNaN(minCost) && (data.est_yearly_cost === null || data.est_yearly_cost < minCost)) return false;
-        }
-        if (beforeVal && data.created) {
-            if (data.created > beforeVal) return false;
-        }
-        if (afterVal && data.created) {
-            if (data.created < afterVal) return false;
-        }
-        if (locationVal) {
-            try {
-                if (!new RegExp(locationVal, "i").test(data.location)) return false;
-            } catch(e) {
-                if (data.location.toLowerCase().indexOf(locationVal.toLowerCase()) === -1) return false;
-            }
-        }
-        if (reasonVal) {
-            try {
-                if (!new RegExp(reasonVal, "i").test(data.reasons)) return false;
-            } catch(e) {
-                if (data.reasons.toLowerCase().indexOf(reasonVal.toLowerCase()) === -1) return false;
-            }
-        }
+        if (!isNaN(minCost) && (data.est_yearly_cost === null || data.est_yearly_cost < minCost)) return false;
+        if (beforeVal && data.created && data.created > beforeVal) return false;
+        if (afterVal && data.created && data.created < afterVal) return false;
+        if (locationRe && !locationRe.test(data.location)) return false;
+        if (reasonRe && !reasonRe.test(data.reasons)) return false;
         return true;
     });
     updateHash();
@@ -282,6 +261,15 @@ h1 {{
     margin: 0 0 12px 0;
     font-size: 1.4em;
     color: #e6db74;
+}}
+.readme-link {{
+    font-size: 0.875em;
+    vertical-align: middle;
+    color: #66d9ef;
+    text-decoration: none;
+}}
+.readme-link:hover {{
+    color: #a6e22e;
 }}
 #filter-bar {{
     display: flex;
@@ -607,7 +595,7 @@ def render_html(result: ScanResult, sort: str = "cost", readme_uri: str | None =
         safe_uri = html_mod.escape(readme_uri, quote=True)
         readme_link = (
             f' <a href="{safe_uri}" target="_blank" rel="noopener"'
-            f' style="font-size:0.5em;vertical-align:middle;color:#66d9ef">(README)</a>'
+            f' class="readme-link">README</a>'
         )
 
     return HTML_TEMPLATE.format(

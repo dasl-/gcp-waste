@@ -68,6 +68,7 @@ class WasteConfig(BaseModel):
     blocklist: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     min_yearly_cost: float | None = None
     exclude_projects: list[str] = Field(default_factory=list)
+    html_readme_uri: str | None = None
 
     def is_blocklisted(self, project: str, resource_type: str, resource_name: str) -> bool:
         """Check if a resource matches any blocklist pattern."""

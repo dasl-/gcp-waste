@@ -140,6 +140,10 @@ thresholds:
 # Set to null or remove to show all resources regardless of cost.
 # min_yearly_cost: 100.0
 
+# html_readme_uri: link to display next to the title in HTML output.
+# Can also be set via --html-readme-uri on the CLI (CLI flag overrides this).
+# html_readme_uri: "https://wiki.example.com/gcp-waste-runbook"
+
 # Blocklist: resources to skip during scans, per project and resource type.
 # Supports glob patterns (e.g. "prod-*", "critical-db-?").
 # Use this to exclude known-good resources that appear idle by metrics
