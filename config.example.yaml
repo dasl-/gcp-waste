@@ -145,8 +145,10 @@ thresholds:
 # html_readme_uri: "https://wiki.example.com/gcp-waste-runbook"
 
 # bigquery_billing_table: fully-qualified BigQuery table for GCP billing export.
-# Required when using --pricing-backend bigquery.
-# Set up billing export: https://cloud.google.com/billing/docs/how-to/export-data-bigquery
+# Required when using --pricing-backend bigquery. Must be a "detailed usage cost"
+# export table (gcp_billing_export_resource_v1_*).
+# Set up: https://cloud.google.com/billing/docs/how-to/export-data-bigquery
+# Schema: https://cloud.google.com/billing/docs/how-to/export-data-bigquery-tables/detailed-usage
 # bigquery_billing_table: "my-project.my_dataset.gcp_billing_export_resource_v1_AAAAAA_BBBBBB_CCCCCC"
 
 # Blocklist: resources to skip during scans, per project and resource type.

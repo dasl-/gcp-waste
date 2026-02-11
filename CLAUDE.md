@@ -10,7 +10,8 @@ GCP idle resource finder. Scans projects for underutilized Compute VMs, persiste
 
 # Run the tool
 .venv/bin/gcp-waste scan -p <project-id>
-.venv/bin/gcp-waste scan -p <project-id> --pricing-backend bigquery -o csv
+.venv/bin/gcp-waste scan -p <project-id> --pricing-backend bigquery \
+  --bigquery-billing-table "project.dataset.gcp_billing_export_resource_v1_XXXXXX_YYYYYY_ZZZZZZ" -o csv
 ```
 
 ## Architecture
@@ -91,9 +92,11 @@ There are **two** places where criterion defaults live and must stay in sync:
 
 ## BigQuery Billing Export Reference
 
-The `BigQueryPricingBackend` queries the standard GCP detailed usage export table. Each row is a cost line item for a specific SKU applied to a specific resource during a time window.
+The `BigQueryPricingBackend` queries the [GCP detailed usage cost](https://cloud.google.com/billing/docs/how-to/export-data-bigquery-tables/detailed-usage) export table. Each row is a cost line item for a specific SKU applied to a specific resource during a time window.
 
 ### Key Columns
+
+See [detailed usage cost schema](https://cloud.google.com/billing/docs/how-to/export-data-bigquery-tables/detailed-usage#schema) for the full schema. Columns used by `BigQueryPricingBackend`:
 
 | Column | Type | Description |
 |---|---|---|
@@ -102,8 +105,8 @@ The `BigQueryPricingBackend` queries the standard GCP detailed usage export tabl
 | `project.id` | STRING | GCP project ID |
 | `resource.global_name` | STRING | Full resource URI — primary identifier for per-resource cost rollup |
 | `resource.name` | STRING | Resource name (format varies by resource type, see below) |
-| `cost` | FLOAT | Cost for this line item |
-| `cost_at_effective_price_default` | FLOAT | Cost at effective price (preferred over `cost` when available) |
+| `cost` | FLOAT | Cost at list price |
+| `cost_at_effective_price_default` | FLOAT | Cost at [effective price](https://cloud.google.com/billing/docs/how-to/export-data-bigquery-tables/detailed-usage#effective_price) (preferred over `cost` when available) |
 | `usage_start_time` | TIMESTAMP | Start of usage window |
 
 ### Resource Identification by Type

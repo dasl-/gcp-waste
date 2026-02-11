@@ -76,6 +76,7 @@ gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 | `--concurrency` | `-j` | `4` | Max parallel workers for API calls |
 | `--quota-project` | | | GCP project for API quota (avoids default 180 req/min limit) |
 | `--pricing-backend` | | `lookup` | Pricing backend: `lookup`, `bigquery`, or custom `dotted.module.ClassName` |
+| `--bigquery-billing-table` | | | Fully-qualified BigQuery table for billing export (required for `bigquery` backend) |
 | `--html-readme-uri` | | | URI to link as README in the HTML output title |
 | `--verbose` | `-v` | `false` | Verbose output |
 
@@ -145,6 +146,30 @@ min_yearly_cost: 50.0
 
 See `config.example.yaml` for full documentation of all options.
 
+## BigQuery Pricing
+
+The default `lookup` pricing backend uses hardcoded rate tables for cost estimates. For actual costs based on your billing data, use the `bigquery` backend with a [detailed usage cost](https://cloud.google.com/billing/docs/how-to/export-data-bigquery-tables/detailed-usage) billing export table.
+
+### Setup
+
+1. [Enable billing export to BigQuery](https://cloud.google.com/billing/docs/how-to/export-data-bigquery) with **Detailed usage cost data** enabled.
+2. Note the fully-qualified table name (format: `project.dataset.gcp_billing_export_resource_v1_XXXXXX_YYYYYY_ZZZZZZ`).
+3. Install the BigQuery dependency: `pip install -e ".[bigquery]"`
+
+### Usage
+
+```bash
+# Via CLI flag
+gcp-waste scan -p my-project --pricing-backend bigquery \
+  --bigquery-billing-table "my-project.my_dataset.gcp_billing_export_resource_v1_AAAAAA_BBBBBB_CCCCCC"
+
+# Or set in config.yaml to avoid repeating:
+#   bigquery_billing_table: "my-project.my_dataset.gcp_billing_export_resource_v1_AAAAAA_BBBBBB_CCCCCC"
+gcp-waste scan -p my-project --pricing-backend bigquery
+```
+
+The backend queries a 26-day window (30 days ago to 4 days ago, excluding recent unsettled data) and annualizes the costs. Resources not found in the billing export fall back to lookup table estimates.
+
 ## HTML Output
 
 The `-o html` format produces a self-contained HTML file with an interactive table (powered by [Tabulator](https://tabulator.info/)). Features:
@@ -200,7 +225,8 @@ src/waste/
   output.py            # Table/JSON/CSV formatters (Rich)
   html_template.py     # Interactive HTML output (Tabulator JS)
   monitoring.py        # Cloud Monitoring API wrapper
-  pricing.py           # Cost estimation
+  pricing.py           # Cost estimation (lookup tables)
+  bigquery_pricing.py  # Cost estimation (BigQuery billing export)
   checkers/            # Resource type scanners
     base.py            # Abstract base checker
     registry.py        # Checker registry
