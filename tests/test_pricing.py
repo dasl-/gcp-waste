@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from waste.models import IdleResource, ResourceType
@@ -321,3 +323,16 @@ class TestCreatePricingBackend:
     def test_dotted_path_not_subclass(self):
         with pytest.raises(ValueError, match="not a PricingBackend subclass"):
             create_pricing_backend("waste.pricing.HOURS_PER_MONTH")
+
+    def test_bigquery_requires_table(self):
+        with pytest.raises(ValueError, match="requires a billing table"):
+            create_pricing_backend("bigquery")
+
+    def test_bigquery_with_table(self):
+        with patch("waste.bigquery_pricing.bigquery") as mock_bq:
+            mock_bq.Client.return_value = MagicMock()
+            backend = create_pricing_backend(
+                "bigquery",
+                bigquery_billing_table="my-project.my_dataset.gcp_billing_export_resource_v1_AAAAAA_BBBBBB_CCCCCC",
+            )
+            assert isinstance(backend, PricingBackend)

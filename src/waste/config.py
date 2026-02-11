@@ -69,6 +69,7 @@ class WasteConfig(BaseModel):
     min_yearly_cost: float | None = None
     exclude_projects: list[str] = Field(default_factory=list)
     html_readme_uri: str | None = None
+    bigquery_billing_table: str | None = None
 
     def is_blocklisted(self, project: str, resource_type: str, resource_name: str) -> bool:
         """Check if a resource matches any blocklist pattern."""
@@ -111,6 +112,9 @@ def _log_config(config: WasteConfig, source: str) -> None:
 
     if config.exclude_projects:
         logger.info("  exclude_projects: %s", ", ".join(config.exclude_projects))
+
+    if config.bigquery_billing_table:
+        logger.info("  bigquery_billing_table: %s", config.bigquery_billing_table)
 
     if config.blocklist:
         for project, types in config.blocklist.items():

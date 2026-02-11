@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-import sys
 from abc import ABC, abstractmethod
-from pathlib import Path
 
 from waste.models import IdleResource, ResourceType
 
@@ -212,12 +210,18 @@ class LookupPricingBackend(PricingBackend):
 PricingClient = LookupPricingBackend
 
 
-def create_pricing_backend(backend: str) -> PricingBackend:
+def create_pricing_backend(
+    backend: str,
+    *,
+    bigquery_billing_table: str | None = None,
+) -> PricingBackend:
     """Create a pricing backend by name or dotted import path.
 
     Args:
         backend: One of "lookup", "bigquery", or a dotted path like
                  "mypackage.module.ClassName".
+        bigquery_billing_table: Fully-qualified BigQuery table name for billing
+                 export data. Required when backend is "bigquery".
 
     Returns:
         A PricingBackend instance.
@@ -230,13 +234,14 @@ def create_pricing_backend(backend: str) -> PricingBackend:
         return LookupPricingBackend()
 
     if backend == "bigquery":
-        # Add repo root to sys.path so the gitignored costs/ package is importable
-        repo_root = str(Path(__file__).resolve().parents[2])
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-        from costs.bigquery_pricing import BigQueryPricingBackend
+        if not bigquery_billing_table:
+            raise ValueError(
+                "BigQuery pricing backend requires a billing table. "
+                "Set --bigquery-billing-table or bigquery_billing_table in config."
+            )
+        from waste.bigquery_pricing import BigQueryPricingBackend
 
-        return BigQueryPricingBackend()
+        return BigQueryPricingBackend(table=bigquery_billing_table)
 
     # Dotted path: "some.module.ClassName"
     if "." not in backend:

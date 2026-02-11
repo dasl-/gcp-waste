@@ -144,6 +144,11 @@ thresholds:
 # Can also be set via --html-readme-uri on the CLI (CLI flag overrides this).
 # html_readme_uri: "https://wiki.example.com/gcp-waste-runbook"
 
+# bigquery_billing_table: fully-qualified BigQuery table for GCP billing export.
+# Required when using --pricing-backend bigquery.
+# Set up billing export: https://cloud.google.com/billing/docs/how-to/export-data-bigquery
+# bigquery_billing_table: "my-project.my_dataset.gcp_billing_export_resource_v1_AAAAAA_BBBBBB_CCCCCC"
+
 # Blocklist: resources to skip during scans, per project and resource type.
 # Supports glob patterns (e.g. "prod-*", "critical-db-?").
 # Use this to exclude known-good resources that appear idle by metrics

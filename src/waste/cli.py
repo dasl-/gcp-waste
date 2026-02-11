@@ -161,6 +161,10 @@ def scan(
         Optional[str],
         typer.Option("--html-readme-uri", help="URI to link as README in the HTML output title"),
     ] = None,
+    bigquery_billing_table: Annotated[
+        Optional[str],
+        typer.Option("--bigquery-billing-table", help="Fully-qualified BigQuery table for GCP billing export (required for --pricing-backend bigquery)"),
+    ] = None,
 ) -> None:
     """Scan GCP project(s) for idle/underutilized resources.
 
@@ -190,7 +194,8 @@ def scan(
 
     logger.info("Loading configuration from %s", config_path or "defaults")
     config = load_config(config_path)
-    pricing = create_pricing_backend(pricing_backend)
+    effective_bq_table = bigquery_billing_table if bigquery_billing_table is not None else config.bigquery_billing_table
+    pricing = create_pricing_backend(pricing_backend, bigquery_billing_table=effective_bq_table)
     types_to_scan = _resolve_types(resource_type)
 
     # Each project spawns a monitoring client + one checker client per resource
