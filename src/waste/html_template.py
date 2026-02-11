@@ -90,6 +90,14 @@ var table = new Tabulator("#table", {
     initialSort: [{column:"est_yearly_cost", dir:"desc"}],
     placeholder: "No matching resources",
     renderVertical: "basic",
+    rowFormatter: function(row) {
+        var data = row.getData();
+        var el = row.getElement();
+        el.classList.remove("diff-added", "diff-removed", "diff-cost-changed");
+        if (data._diff === "added") el.classList.add("diff-added");
+        else if (data._diff === "removed") el.classList.add("diff-removed");
+        else if (data._diff === "cost-changed") el.classList.add("diff-cost-changed");
+    },
 });
 
 table.on("tableBuilt", function() {
@@ -145,17 +153,43 @@ function applyFilters() {
 }
 
 // ---- Cost totaling ----
+function fmtCost(v) {
+    return "$" + v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + "/yr";
+}
+
 function updateSummary(rows) {
     if (!rows) rows = table.getRows("active");
-    var total = 0;
-    var count = 0;
+    var total = 0, count = 0;
+    var addedCost = 0, removedCost = 0, changedDelta = 0;
+    var hasDiff = false;
     for (var i = 0; i < rows.length; i++) {
+        var d = rows[i].getData();
         count++;
-        var cost = rows[i].getData().est_yearly_cost;
-        if (cost !== null && cost !== undefined) total += cost;
+        var cost = d.est_yearly_cost;
+        if (cost !== null && cost !== undefined) {
+            if (d._diff !== "removed") total += cost;
+        }
+        if (d._diff) {
+            hasDiff = true;
+            if (d._diff === "added" && cost != null) addedCost += cost;
+            else if (d._diff === "removed" && cost != null) removedCost += cost;
+            else if (d._diff === "cost-changed" && cost != null && d._old_cost != null) changedDelta += cost - d._old_cost;
+        }
     }
-    document.getElementById("total-cost").textContent =
-        "Total: $" + total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + "/yr";
+
+    var el = document.getElementById("total-cost");
+    if (hasDiff) {
+        var parts = ["Total: " + fmtCost(total)];
+        if (addedCost)    parts.push('<span class="added">+' + fmtCost(addedCost) + ' added</span>');
+        if (removedCost)  parts.push('<span class="removed">\\u2212' + fmtCost(removedCost) + ' removed</span>');
+        if (changedDelta) {
+            var sign = changedDelta > 0 ? "+" : "\\u2212";
+            parts.push('<span class="cost-changed">' + sign + fmtCost(Math.abs(changedDelta)) + ' changed</span>');
+        }
+        el.innerHTML = parts.join(" &nbsp; ");
+    } else {
+        el.textContent = "Total: " + fmtCost(total);
+    }
     document.getElementById("row-count").textContent =
         count + " of " + DATA.length + " resources";
 }
@@ -253,6 +287,178 @@ setTimeout(function() {
     updateSummary();
     initialized = true;
 }, 0);
+
+// ---- Diff / Compare logic ----
+var COST_THRESHOLD_PCT = 25;
+
+function resourceKey(row) {
+    return row.project + "\\0" + row.resource_type + "\\0" + row.name;
+}
+
+function extractDataFromHtml(html) {
+    var match = html.match(/var DATA = (\\[[\\s\\S]*?\\]);\\s*$/m);
+    if (!match) return null;
+    try { return JSON.parse(match[1]); }
+    catch(e) { return null; }
+}
+
+function applyDiff(oldData) {
+    var oldByKey = {};
+    for (var i = 0; i < oldData.length; i++) {
+        oldByKey[resourceKey(oldData[i])] = oldData[i];
+    }
+
+    var addedCount = 0, removedCount = 0, costChangedCount = 0;
+
+    // Build merged dataset: current rows with diff status + removed rows
+    var merged = [];
+    var currentKeys = {};
+    for (var i = 0; i < DATA.length; i++) {
+        var row = Object.assign({}, DATA[i]);
+        var key = resourceKey(row);
+        currentKeys[key] = true;
+
+        if (!oldByKey[key]) {
+            row._diff = "added";
+            addedCount++;
+        } else {
+            var oldCost = oldByKey[key].est_yearly_cost;
+            var newCost = row.est_yearly_cost;
+            if (oldCost != null && newCost != null && !(oldCost === 0 && newCost === 0)) {
+                var pct = oldCost === 0 ? Infinity : Math.abs(newCost - oldCost) / Math.abs(oldCost) * 100;
+                if (pct > COST_THRESHOLD_PCT) {
+                    row._diff = "cost-changed";
+                    row._old_cost = oldCost;
+                    costChangedCount++;
+                }
+            }
+        }
+        merged.push(row);
+    }
+
+    // Add removed rows (present in old, absent in current)
+    for (var i = 0; i < oldData.length; i++) {
+        var key = resourceKey(oldData[i]);
+        if (!currentKeys[key]) {
+            var row = Object.assign({}, oldData[i]);
+            row._diff = "removed";
+            removedCount++;
+            merged.push(row);
+        }
+    }
+
+    // Replace table data and apply row formatter
+    table.setData(merged);
+
+    // Update summary counts
+    var summary = document.getElementById("diff-summary");
+    summary.style.display = "flex";
+    summary.querySelector(".added").textContent = addedCount ? "+" + addedCount + " added" : "";
+    summary.querySelector(".removed").textContent = removedCount ? "\\u2212" + removedCount + " removed" : "";
+    summary.querySelector(".cost-changed").textContent = costChangedCount ? "~" + costChangedCount + " cost changed" : "";
+
+    document.getElementById("compare-clear").style.display = "";
+    document.getElementById("compare-bar").classList.add("has-diff");
+}
+
+function clearDiff() {
+    table.setData(DATA);
+    document.getElementById("diff-summary").style.display = "none";
+    document.getElementById("compare-clear").style.display = "none";
+    document.getElementById("compare-bar").classList.remove("has-diff");
+    document.getElementById("compare-select").value = "";
+}
+
+// Discover sibling HTML files when served from a web server
+function discoverSiblingReports() {
+    var select = document.getElementById("compare-select");
+    // Determine base directory URL
+    var loc = window.location;
+    if (loc.protocol === "file:") return;  // Cannot list local directories
+
+    var currentFile = loc.pathname.split("/").pop();
+    var dirUrl = loc.href.substring(0, loc.href.lastIndexOf("/") + 1);
+
+    fetch(dirUrl).then(function(resp) {
+        if (!resp.ok) return;
+        return resp.text();
+    }).then(function(html) {
+        if (!html) return;
+        // Parse HTML or XML directory listing for .html files
+        var files = [];
+        // Match href="...*.html" in both HTML and XML listings
+        var re = /href="([^"]*\\.html)"/gi;
+        var m;
+        while ((m = re.exec(html)) !== null) {
+            var name = m[1];
+            // Ignore full URLs to other hosts
+            if (name.indexOf("://") !== -1) continue;
+            // Extract just the filename
+            name = name.split("/").pop();
+            if (name && name !== currentFile && files.indexOf(name) === -1) {
+                files.push(name);
+            }
+        }
+        files.sort().reverse();  // newest first by name convention
+        for (var i = 0; i < files.length; i++) {
+            var opt = document.createElement("option");
+            opt.value = files[i];
+            opt.textContent = files[i];
+            select.appendChild(opt);
+        }
+    }).catch(function() { /* ignore fetch errors */ });
+}
+
+function loadComparisonFromUrl(url) {
+    fetch(url).then(function(resp) {
+        if (!resp.ok) throw new Error("Failed to fetch " + url);
+        return resp.text();
+    }).then(function(html) {
+        var oldData = extractDataFromHtml(html);
+        if (!oldData) { alert("Could not parse report data from selected file."); return; }
+        applyDiff(oldData);
+    }).catch(function(err) {
+        alert("Error loading comparison file: " + err.message);
+    });
+}
+
+function loadComparisonFromFile(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var oldData = extractDataFromHtml(e.target.result);
+        if (!oldData) { alert("Could not parse report data from selected file."); return; }
+        applyDiff(oldData);
+    };
+    reader.readAsText(file);
+}
+
+// Wire up menu toggle
+document.getElementById("menu-btn").addEventListener("click", function() {
+    var bar = document.getElementById("compare-bar");
+    bar.classList.toggle("visible");
+    this.classList.toggle("active");
+});
+
+// Wire up compare UI
+document.getElementById("compare-select").addEventListener("change", function() {
+    var val = this.value;
+    if (!val) return;
+    loadComparisonFromUrl(val);
+});
+
+document.getElementById("compare-browse").addEventListener("click", function() {
+    document.getElementById("compare-file").click();
+});
+
+document.getElementById("compare-file").addEventListener("change", function() {
+    if (this.files.length > 0) loadComparisonFromFile(this.files[0]);
+});
+
+document.getElementById("compare-clear").addEventListener("click", function() {
+    clearDiff();
+});
+
+discoverSiblingReports();
 """
 
 HTML_TEMPLATE = """\
@@ -274,10 +480,34 @@ body {{
     background: #1e1e1e;
     color: #f8f8f2;
 }}
-h1 {{
+#title-bar {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin: 0 0 12px 0;
+}}
+h1 {{
+    margin: 0;
     font-size: 1.4em;
     color: #e6db74;
+}}
+#menu-btn {{
+    background: none;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    color: #75715e;
+}}
+#menu-btn:hover {{
+    border-color: #a6e22e;
+    color: #f8f8f2;
+}}
+#menu-btn.active {{
+    border-color: #a6e22e;
+    color: #a6e22e;
 }}
 .readme-link {{
     font-size: 0.875em;
@@ -339,6 +569,9 @@ h1 {{
     font-size: 16px;
     color: #f92672;
 }}
+#total-cost .added {{ color: #a6e22e; font-size: 13px; font-weight: normal; }}
+#total-cost .removed {{ color: #f92672; font-size: 13px; font-weight: normal; }}
+#total-cost .cost-changed {{ color: #e6db74; font-size: 13px; font-weight: normal; }}
 #row-count {{
     color: #75715e;
 }}
@@ -447,6 +680,82 @@ h1 {{
     font-size: 16px;
     color: #75715e;
 }}
+/* Diff highlighting — selectors must be at least as specific as the
+   Monokai row/cell overrides above (.tabulator .tabulator-tableholder
+   .tabulator-table .tabulator-row = 0-4-0) to win. */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-added {{
+    border-left: 3px solid #a6e22e !important;
+}}
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-removed {{
+    border-left: 3px solid #f92672 !important;
+}}
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-removed .tabulator-cell {{
+    text-decoration: line-through;
+    opacity: 0.4;
+}}
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-cost-changed {{
+    border-left: 3px solid #e6db74 !important;
+}}
+#compare-bar {{
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 16px;
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #75715e;
+}}
+#compare-bar.visible {{
+    display: flex;
+}}
+#compare-bar.has-diff {{
+    border-color: #a6e22e;
+}}
+#compare-file {{
+    display: none;
+}}
+#compare-select {{
+    padding: 6px 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #3e3d32;
+    color: #f8f8f2;
+    font-size: 13px;
+    font-family: inherit;
+    max-width: 300px;
+}}
+#compare-select:focus {{
+    outline: none;
+    border-color: #a6e22e;
+}}
+#compare-browse, #compare-clear {{
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #3e3d32;
+    color: #f8f8f2;
+    font-size: 13px;
+    font-family: inherit;
+}}
+#compare-browse:hover, #compare-clear:hover {{
+    background: #49483e;
+    border-color: #a6e22e;
+}}
+#compare-clear {{
+    display: none;
+}}
+#diff-summary {{
+    display: none;
+    gap: 12px;
+    font-size: 13px;
+}}
+#diff-summary .added {{ color: #a6e22e; }}
+#diff-summary .removed {{ color: #f92672; }}
+#diff-summary .cost-changed {{ color: #e6db74; }}
 /* Muted text in cells */
 .tabulator span[style*="color:#888"] {{
     color: #75715e !important;
@@ -454,7 +763,10 @@ h1 {{
 </style>
 </head>
 <body>
+<div id="title-bar">
 <h1>💸 Potential GCP Waste{readme_link}</h1>
+<button id="menu-btn" title="Compare reports">&#9776;</button>
+</div>
 
 <div id="filter-bar">
     <label>Project
@@ -488,6 +800,20 @@ h1 {{
         <input type="number" id="filter-min-cost" placeholder="0" min="0" step="100">
     </label>
     <button id="clear-filters">Clear Filters</button>
+</div>
+
+<div id="compare-bar">
+    <span>Compare:</span>
+    <select id="compare-select"><option value="">Select a previous report&hellip;</option></select>
+    <span style="color:#555">or</span>
+    <button id="compare-browse">Browse&hellip;</button>
+    <input type="file" id="compare-file" accept=".html">
+    <button id="compare-clear">Clear comparison</button>
+    <span id="diff-summary">
+        <span class="added"></span>
+        <span class="removed"></span>
+        <span class="cost-changed"></span>
+    </span>
 </div>
 
 <div id="summary-bar">
