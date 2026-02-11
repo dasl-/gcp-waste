@@ -195,6 +195,8 @@ function updateSummary(rows) {
 }
 
 // ---- URL hash sync ----
+var activeCompareFile = "";  // filename of the currently loaded comparison
+
 function updateHash() {
     var params = new URLSearchParams();
     var fields = {
@@ -217,6 +219,8 @@ function updateHash() {
         params.set("sort", sorters[0].field);
         params.set("dir", sorters[0].dir);
     }
+
+    if (activeCompareFile) params.set("compare", activeCompareFile);
 
     var hash = params.toString();
     history.replaceState(null, "", hash ? "#" + hash : window.location.pathname);
@@ -247,6 +251,21 @@ function loadFromHash() {
     }
 
     applyFilters();
+
+    if (params.has("compare")) {
+        var file = params.get("compare");
+        document.getElementById("compare-bar").classList.add("visible");
+        document.getElementById("menu-btn").classList.add("active");
+        var select = document.getElementById("compare-select");
+        if (!select.querySelector('option[value="' + CSS.escape(file) + '"]')) {
+            var opt = document.createElement("option");
+            opt.value = file;
+            opt.textContent = file;
+            select.appendChild(opt);
+        }
+        select.value = file;
+        loadComparisonFromUrl(file);
+    }
 }
 
 // ---- Event wiring ----
@@ -359,6 +378,7 @@ function applyDiff(oldData) {
 
     document.getElementById("compare-clear").style.display = "";
     document.getElementById("compare-bar").classList.add("has-diff");
+    if (initialized) updateHash();
 }
 
 function clearDiff() {
@@ -367,6 +387,8 @@ function clearDiff() {
     document.getElementById("compare-clear").style.display = "none";
     document.getElementById("compare-bar").classList.remove("has-diff");
     document.getElementById("compare-select").value = "";
+    activeCompareFile = "";
+    updateHash();
 }
 
 // Discover sibling HTML files when served from a web server
@@ -416,6 +438,7 @@ function loadComparisonFromUrl(url) {
     }).then(function(html) {
         var oldData = extractDataFromHtml(html);
         if (!oldData) { alert("Could not parse report data from selected file."); return; }
+        activeCompareFile = url.split("/").pop();
         applyDiff(oldData);
     }).catch(function(err) {
         alert("Error loading comparison file: " + err.message);
@@ -427,6 +450,7 @@ function loadComparisonFromFile(file) {
     reader.onload = function(e) {
         var oldData = extractDataFromHtml(e.target.result);
         if (!oldData) { alert("Could not parse report data from selected file."); return; }
+        activeCompareFile = file.name;
         applyDiff(oldData);
     };
     reader.readAsText(file);
