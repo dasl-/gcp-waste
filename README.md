@@ -4,6 +4,24 @@ GCP Idle Resource Finder — identify underutilized Google Cloud resources to re
 
 Scans Compute Engine VMs, Persistent Disks, Bigtable clusters, and Cloud Storage buckets, querying metrics from Cloud Monitoring to determine idleness based on configurable criteria.
 
+## Contents
+
+- [Installation](#installation)
+- [Authentication](#authentication)
+- [Usage](#usage)
+  - [CLI Options](#cli-options)
+- [Configuration](#configuration)
+  - [Idleness Criteria](#idleness-criteria)
+  - [Criteria Modes](#criteria-modes)
+  - [Blocklist](#blocklist)
+  - [Other Config Options](#other-config-options)
+- [BigQuery Pricing](#bigquery-pricing)
+- [HTML Output](#html-output)
+  - [Comparing Reports](#comparing-reports)
+- [Scaling to Many Projects](#scaling-to-many-projects)
+- [Development](#development)
+- [Project Structure](#project-structure)
+
 ## Installation
 
 ```bash
