@@ -14,7 +14,7 @@ from waste.config import WasteConfig, load_config
 from waste.criteria import build_criteria_group
 from waste.models import ScanResult
 from waste.monitoring import MonitoringClient
-from waste.output import output_result
+from waste.output import FORMAT_EXTENSIONS, VALID_FORMATS, output_result, render_format
 from waste.pricing import PricingBackend, create_pricing_backend
 from waste.utils.permissions import PermissionChecker
 
@@ -165,6 +165,10 @@ def scan(
         Optional[str],
         typer.Option("--bigquery-billing-table", help="Fully-qualified BigQuery table for GCP billing export (required for --pricing-backend bigquery)"),
     ] = None,
+    output_path: Annotated[
+        Optional[Path],
+        typer.Option("--output-path", help="Base file path for output files (extension added per format, e.g. --output-path report -o csv,html writes report.csv and report.html)"),
+    ] = None,
 ) -> None:
     """Scan GCP project(s) for idle/underutilized resources.
 
@@ -179,6 +183,25 @@ def scan(
     _setup_logging(verbose)
 
     from waste.output import SORT_KEYS
+
+    # Parse and validate output formats
+    formats = [f.strip() for f in output_format.split(",")]
+    for fmt in formats:
+        if fmt not in VALID_FORMATS:
+            stderr_console.print(f"[red]Unknown output format:[/red] {fmt}")
+            stderr_console.print(f"Valid formats: {', '.join(sorted(VALID_FORMATS))}")
+            raise typer.Exit(1)
+
+    file_formats = [f for f in formats if f in FORMAT_EXTENSIONS]
+
+    if len(formats) > 1 and output_path is None:
+        stderr_console.print("[red]Multiple output formats require --output-path[/red]")
+        stderr_console.print("Example: gcp-waste scan -p my-project -o csv,html --output-path report")
+        raise typer.Exit(1)
+
+    if output_path is not None and not file_formats:
+        stderr_console.print("[red]--output-path requires file formats in -o (e.g. -o csv,html)[/red]")
+        raise typer.Exit(1)
 
     if sort not in SORT_KEYS:
         stderr_console.print(f"[red]Unknown sort key:[/red] {sort}")
@@ -275,7 +298,19 @@ def scan(
         combined.total_estimated_savings,
     )
     readme_uri = html_readme_uri if html_readme_uri is not None else config.html_readme_uri
-    output_result(combined, format=output_format, console=console, sort=sort, readme_uri=readme_uri)
+
+    if output_path is not None:
+        output_path = output_path.expanduser()
+        # Multi-format file output: always show table on stdout
+        output_result(combined, format="table", console=console, sort=sort, readme_uri=readme_uri)
+        for fmt in file_formats:
+            content = render_format(combined, fmt, sort=sort, readme_uri=readme_uri)
+            filepath = Path(f"{output_path}{FORMAT_EXTENSIONS[fmt]}")
+            filepath.write_text(content)
+            stderr_console.print(f"Wrote {filepath}")
+    else:
+        # Single format to stdout (backward compatible)
+        output_result(combined, format=formats[0], console=console, sort=sort, readme_uri=readme_uri)
 
 
 def _scan_project(

@@ -949,7 +949,7 @@ def render_html(result: ScanResult, sort: str = "cost", readme_uri: str | None =
             "created": created,
             "created_detail": created_detail,
             "reasons": ", ".join(r.idle_criterion_names),
-            "est_yearly_cost": r.estimated_yearly_cost,
+            "est_yearly_cost": round(r.estimated_yearly_cost, 2) if r.estimated_yearly_cost is not None else None,
             "is_estimated": r.metadata.get("pricing_source") == "lookup_fallback",
         })
 

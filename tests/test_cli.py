@@ -68,6 +68,43 @@ class TestCLI:
         assert result.exit_code == 0
 
 
+    @patch("waste.cli._scan_project")
+    def test_scan_multiple_formats_requires_output_path(self, mock_scan_project):
+        result = runner.invoke(
+            app, ["scan", "--project", "test-project", "--output", "csv,html"]
+        )
+        assert result.exit_code != 0
+        assert "--output-path" in result.output
+
+    @patch("waste.cli._scan_project")
+    def test_scan_output_path_requires_file_formats(self, mock_scan_project):
+        result = runner.invoke(
+            app, ["scan", "--project", "test-project", "--output-path", "/tmp/report"]
+        )
+        assert result.exit_code != 0
+        assert "file formats" in result.output
+
+    @patch("waste.cli._scan_project")
+    def test_scan_output_path_with_formats(self, mock_scan_project, tmp_path):
+        mock_scan_project.return_value = ScanResult(project="test-project")
+
+        base = str(tmp_path / "report")
+        result = runner.invoke(
+            app, ["scan", "--project", "test-project", "--output", "csv,json", "--output-path", base]
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / "report.csv").exists()
+        assert (tmp_path / "report.json").exists()
+
+    @patch("waste.cli._scan_project")
+    def test_scan_invalid_format(self, mock_scan_project):
+        result = runner.invoke(
+            app, ["scan", "--project", "test-project", "--output", "xml"]
+        )
+        assert result.exit_code != 0
+        assert "Unknown output format" in result.output
+
+
 class TestResolveProjects:
     def test_literal_project_id(self):
         # A plain project ID is returned as-is without API call

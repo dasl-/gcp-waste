@@ -2,6 +2,10 @@
 
 GCP idle resource finder. Scans projects for underutilized Compute VMs, persistent disks, Bigtable clusters, and Cloud Storage buckets.
 
+## Git Workflow
+
+Do not commit or push unless explicitly asked by the user.
+
 ## Quick Reference
 
 ```bash

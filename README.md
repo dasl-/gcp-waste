@@ -75,6 +75,9 @@ gcp-waste scan -p my-project -o html > report.html
 # Hide low-cost resources
 gcp-waste scan -p my-project --min-cost 100
 
+# Multiple output formats to files (table always shown on stdout)
+gcp-waste scan -p my-project -o csv,html --output-path report
+
 # High concurrency with quota project to avoid rate limits
 gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 ```
@@ -86,7 +89,8 @@ gcp-waste scan -p ".*-dev" -j 16 --quota-project my-project
 | `--project` | `-p` | required | GCP project ID or regex pattern |
 | `--type` | `-t` | `all` | Resource type: `all`, `compute`, `persistent_disk`, `bigtable`, `storage` |
 | `--config` | `-c` | built-in defaults | Path to config YAML |
-| `--output` | `-o` | `table` | Output format: `table`, `json`, `csv`, `html` |
+| `--output` | `-o` | `table` | Output format: `table`, `json`, `csv`, `html` (comma-separated for multiple, requires `--output-path`) |
+| `--output-path` | | | Base file path for output files (extension added per format) |
 | `--sort` | `-s` | `cost` | Sort by: `cost`, `name`, `type`, `project`, `location`, `created` |
 | `--min-age` | | | Only scan resources older than N days |
 | `--idle-days` | | | Require idleness for N consecutive days |

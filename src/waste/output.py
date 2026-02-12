@@ -245,6 +245,13 @@ def _serialize_result(result: ScanResult) -> dict:
     }
 
 
+def render_json(result: ScanResult, sort: str = "cost") -> str:
+    """Render scan results as a JSON string."""
+    result.idle_resources = sort_resources(result.idle_resources, sort)
+    data = _serialize_result(result)
+    return json.dumps(data, indent=2)
+
+
 def output_json(
     result: ScanResult,
     console: Console | None = None,
@@ -254,21 +261,11 @@ def output_json(
     """Output scan results as JSON."""
     if console is None:
         console = Console()
-    result.idle_resources = sort_resources(result.idle_resources, sort)
-    data = _serialize_result(result)
-    console.print_json(json.dumps(data, indent=2))
+    console.print_json(render_json(result, sort))
 
 
-def output_csv(
-    result: ScanResult,
-    console: Console | None = None,
-    sort: str = "cost",
-    **kwargs,
-) -> None:
-    """Output scan results as CSV."""
-    if console is None:
-        console = Console()
-
+def render_csv(result: ScanResult, sort: str = "cost") -> str:
+    """Render scan results as a CSV string."""
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["type", "name", "detail", "attached_to", "project", "location", "console_url", "created", "reasons", "est_yearly_cost"])
@@ -305,7 +302,19 @@ def output_csv(
             (f"~{resource.estimated_yearly_cost:.2f}" if resource.metadata.get("pricing_source") == "lookup_fallback" else f"{resource.estimated_yearly_cost:.2f}") if resource.estimated_yearly_cost is not None else "ERROR",
         ])
 
-    console.out(output.getvalue(), highlight=False)
+    return output.getvalue()
+
+
+def output_csv(
+    result: ScanResult,
+    console: Console | None = None,
+    sort: str = "cost",
+    **kwargs,
+) -> None:
+    """Output scan results as CSV."""
+    if console is None:
+        console = Console()
+    console.out(render_csv(result, sort), highlight=False)
 
 
 def output_html(
@@ -329,6 +338,30 @@ FORMATTERS = {
     "csv": output_csv,
     "html": output_html,
 }
+
+FORMAT_EXTENSIONS = {
+    "csv": ".csv",
+    "json": ".json",
+    "html": ".html",
+}
+
+VALID_FORMATS = {"table", "csv", "json", "html"}
+
+
+def render_format(result: ScanResult, format: str, sort: str = "cost", **kwargs) -> str:
+    """Render output in the specified format and return as a string.
+
+    Supports csv, json, and html. Raises ValueError for table (not renderable to string).
+    """
+    if format == "csv":
+        return render_csv(result, sort)
+    if format == "json":
+        return render_json(result, sort)
+    if format == "html":
+        from waste.html_template import render_html
+
+        return render_html(result, sort=sort, readme_uri=kwargs.get("readme_uri"))
+    raise ValueError(f"Cannot render format '{format}' to string")
 
 
 def output_result(
