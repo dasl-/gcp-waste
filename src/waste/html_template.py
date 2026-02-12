@@ -76,7 +76,15 @@ var columns = [
          if (v === null || v === undefined) return "ERROR";
          var row = cell.getRow().getData();
          var prefix = row.is_estimated ? "~" : "";
-         return prefix + "$" + v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + "/yr";
+         var text = prefix + "$" + v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + "/yr";
+         if (row._diff === "cost-changed" && row._old_cost != null) {
+             var delta = v - row._old_cost;
+             var pct = row._old_cost === 0 ? 0 : (delta / Math.abs(row._old_cost)) * 100;
+             var arrow = delta > 0 ? "\u2191" : "\u2193";
+             var sign = delta > 0 ? "+" : "\u2212";
+             text += '<br><span style="color:#e6db74;font-size:0.85em">' + arrow + " " + sign + "$" + Math.abs(delta).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + " (" + sign + Math.abs(pct).toFixed(1) + "%)</span>";
+         }
+         return text;
      }
     },
 ];
@@ -137,6 +145,7 @@ function applyFilters() {
     var afterVal = document.getElementById("filter-created-after").value;
     var locationRe = makeFilter(document.getElementById("filter-location").value.trim());
     var reasonRe = makeFilter(document.getElementById("filter-reason").value.trim());
+    var diffVal = document.getElementById("filter-diff").value;
 
     table.setFilter(function(data) {
         if (projectRe && !projectRe.test(data.project)) return false;
@@ -147,6 +156,8 @@ function applyFilters() {
         if (afterVal && data.created && data.created < afterVal) return false;
         if (locationRe && !locationRe.test(data.location)) return false;
         if (reasonRe && !reasonRe.test(data.reasons)) return false;
+        if (diffVal === "changed" && !data._diff) return false;
+        if (diffVal && diffVal !== "changed" && data._diff !== diffVal) return false;
         return true;
     });
     updateHash();
@@ -207,7 +218,8 @@ function updateHash() {
         "before": "filter-created-before",
         "after": "filter-created-after",
         "location": "filter-location",
-        "reason": "filter-reason"
+        "reason": "filter-reason",
+        "diff": "filter-diff"
     };
     for (var key in fields) {
         var val = document.getElementById(fields[key]).value.trim();
@@ -239,7 +251,8 @@ function loadFromHash() {
         "before": "filter-created-before",
         "after": "filter-created-after",
         "location": "filter-location",
-        "reason": "filter-reason"
+        "reason": "filter-reason",
+        "diff": "filter-diff"
     };
     for (var key in fields) {
         if (params.has(key)) document.getElementById(fields[key]).value = params.get(key);
@@ -280,11 +293,12 @@ for (var i = 0; i < textInputs.length; i++) {
     document.getElementById(textInputs[i]).addEventListener("input", debouncedApply);
 }
 document.getElementById("filter-type").addEventListener("change", applyFilters);
+document.getElementById("filter-diff").addEventListener("change", applyFilters);
 document.getElementById("filter-created-before").addEventListener("change", applyFilters);
 document.getElementById("filter-created-after").addEventListener("change", applyFilters);
 
 document.getElementById("clear-filters").addEventListener("click", function() {
-    var allInputs = textInputs.concat(["filter-type", "filter-created-before", "filter-created-after"]);
+    var allInputs = textInputs.concat(["filter-type", "filter-diff", "filter-created-before", "filter-created-after"]);
     for (var i = 0; i < allInputs.length; i++) {
         document.getElementById(allInputs[i]).value = "";
     }
@@ -387,8 +401,9 @@ function clearDiff() {
     document.getElementById("compare-clear").style.display = "none";
     document.getElementById("compare-bar").classList.remove("has-diff");
     document.getElementById("compare-select").value = "";
+    document.getElementById("filter-diff").value = "";
     activeCompareFile = "";
-    updateHash();
+    applyFilters();
 }
 
 // Discover sibling HTML files when served from a web server
@@ -553,14 +568,14 @@ h1 {{
     border: 1px solid #444;
     border-radius: 6px;
 }}
-#filter-bar label {{
+#filter-bar label, #compare-bar label {{
     display: flex;
     flex-direction: column;
     font-size: 12px;
     color: #75715e;
     font-weight: 600;
 }}
-#filter-bar input, #filter-bar select {{
+#filter-bar input, #filter-bar select, #compare-bar select#filter-diff {{
     margin-top: 4px;
     padding: 6px 8px;
     border: 1px solid #555;
@@ -575,7 +590,7 @@ h1 {{
 #filter-bar input[type="text"], #filter-bar input[type="number"] {{
     width: 130px;
 }}
-#filter-bar input:focus, #filter-bar select:focus {{
+#filter-bar input:focus, #filter-bar select:focus, #compare-bar select#filter-diff:focus {{
     outline: none;
     border-color: #a6e22e;
 }}
@@ -715,7 +730,6 @@ h1 {{
 }}
 .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-removed .tabulator-cell {{
     text-decoration: line-through;
-    opacity: 0.4;
 }}
 .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.diff-cost-changed {{
     border-left: 3px solid #e6db74 !important;
@@ -833,6 +847,14 @@ h1 {{
     <button id="compare-browse">Browse&hellip;</button>
     <input type="file" id="compare-file" accept=".html">
     <button id="compare-clear">Clear comparison</button>
+    <label style="margin-left:12px">Show
+        <select id="filter-diff">
+        <option value="">All</option>
+        <option value="changed">Changes only</option>
+        <option value="added">Added</option>
+        <option value="removed">Removed</option>
+        <option value="cost-changed">Cost changed</option>
+    </select></label>
     <span id="diff-summary">
         <span class="added"></span>
         <span class="removed"></span>
