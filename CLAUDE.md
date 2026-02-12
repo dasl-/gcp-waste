@@ -23,9 +23,10 @@ src/waste/
   models.py       Data models: IdleResource, ScanResult, CriterionResult.
   monitoring.py   Cloud Monitoring API wrapper (query_mean, query_sum, query_rate).
   output.py       Output formatters (Rich table, JSON, CSV, HTML).
-  html_template.py Self-contained HTML output with Tabulator JS (interactive table).
+  html_template.py Self-contained HTML output with Tabulator JS (interactive table + diff UI).
   pricing.py      PricingBackend ABC + LookupPricingBackend (hardcoded rate tables).
   bigquery_pricing.py  BigQueryPricingBackend: queries GCP billing export for actual costs.
+  diff.py         Report diffing: extract data from HTML, compute added/removed/changed.
   vendor/         Vendored JS/CSS (Tabulator 6.3.1) for HTML output.
 
   checkers/       One checker per resource type. Each lists resources, fetches

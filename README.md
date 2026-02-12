@@ -179,11 +179,32 @@ The `-o html` format produces a self-contained HTML file with an interactive tab
 - **Shareable URLs** — filter/sort state encoded in the URL hash fragment
 - **Live cost total** — updates as you filter
 - **Clickable links** — resource names link to GCP Console
+- **Diff/compare** — compare two reports to see what changed (see below)
 
 ```bash
 gcp-waste scan -p "myorg-.*" -o html > report.html
 gcp-waste scan -p my-project -o html --html-readme-uri="https://wiki/runbook" > report.html
 ```
+
+### Comparing Reports
+
+The HTML output includes a built-in diff feature for comparing two reports side-by-side. This is useful for tracking changes over time — e.g., which idle resources were cleaned up, which are new, and whether costs shifted.
+
+**Triggering a comparison:**
+
+- **Menu dropdown** — click the hamburger menu (☰) in the top-right. If the report is served from a web server, sibling `.html` files in the same directory are auto-discovered in a dropdown.
+- **Browse button** — pick any local HTML report file from disk.
+- **Shareable URL** — append `#compare=old_report.html` to the URL to load a comparison automatically.
+
+**Visual markers:**
+
+| Marker | Meaning |
+|--------|---------|
+| Green left border | **Added** — resource is in the new report but not the old |
+| Pink left border (strikethrough, faded) | **Removed** — resource was in the old report but not the new |
+| Yellow left border | **Cost changed** — resource exists in both, cost differs by >25% |
+
+The summary bar updates to show a cost breakdown: total, added, removed, and changed amounts. The URL hash updates with the comparison state so the exact diff view can be shared as a link.
 
 ## Scaling to Many Projects
 
