@@ -46,6 +46,11 @@ WHERE project.id IN UNNEST(@projects)
     resource.name IN UNNEST(@resource_names)
     OR REGEXP_EXTRACT(resource.global_name, r"/([^/]+)$") IN UNNEST(@trailing_ids)
   )
+
+  -- exclude CUDs
+  AND (lower(sku.description) not like '%commitment%')
+  AND (lower(sku.description) not like '%committed%')
+
 GROUP BY resource.global_name, project.id
 """
 
