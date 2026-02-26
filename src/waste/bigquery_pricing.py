@@ -40,7 +40,7 @@ WHERE project.id IN UNNEST(@projects)
   AND usage_start_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 4 DAY)
   AND _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 35 DAY)
   AND _PARTITIONTIME < CURRENT_TIMESTAMP()
-  AND COALESCE(cost_at_effective_price_default, cost) > 0
+  AND COALESCE(cost_at_effective_price_default, cost) != 0
   AND service.description IN ("Compute Engine", "Cloud Bigtable", "Cloud Storage", "Networking", "BigQuery")
   AND (
     resource.name IN UNNEST(@resource_names)
