@@ -85,9 +85,11 @@ def _console_url(resource) -> str:
     if resource.resource_type == ResourceType.STORAGE:
         return f"https://console.cloud.google.com/storage/browser/{resource.name}?project={p}"
     if resource.resource_type == ResourceType.PERSISTENT_DISK:
-        zone = resource.location
+        location = resource.location
         name = resource.name
-        return f"https://console.cloud.google.com/compute/disksDetail/zones/{zone}/disks/{name}?project={p}"
+        # Regional disks use /regions/, zonal disks use /zones/
+        loc_type = "regions" if len(location.split("-")) == 2 else "zones"
+        return f"https://console.cloud.google.com/compute/disksDetail/{loc_type}/{location}/disks/{name}?project={p}"
     return ""
 
 
